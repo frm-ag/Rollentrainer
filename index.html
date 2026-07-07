@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trainer Test - Van Rysel D100</title>
+<style>
+  body {
+    font-family: -apple-system, Arial, sans-serif;
+    background: #1a1a1a;
+    color: #fff;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.3em; color: #2f6690; }
+  #status {
+    padding: 10px 20px;
+    border-radius: 8px;
+    background: #333;
+    margin-bottom: 20px;
+    font-size: 0.9em;
+  }
+  #status.connected { background: #1e5c2e; }
+  #status.error { background: #5c1e1e; }
+  button {
+    background: #2f6690;
+    color: white;
+    border: none;
+    padding: 16px 32px;
+    font-size: 1.1em;
+    border-radius: 10px;
+    margin-bottom: 30px;
+  }
+  button:active { background: #1f4a6e; }
+  .data-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .data-card {
+    background: #2a2a2a;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .data-value {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: #4fa8d8;
+  }
+  .data-label {
+    font-size: 0.85em;
+    color: #999;
+    margin-top: 4px;
+  }
+  #log {
+    margin-top: 30px;
+    font-size: 0.75em;
+    color: #666;
+    max-width: 400px;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<h1>🚴 Trainer Test — Van Rysel D100</h1>
+<div id="status">Nicht verbunden</div>
+<button id="connectBtn">Trainer verbinden</button>
+
+<div class="data-grid">
+  <div class="data-card">
+    <div class="data-value" id="powerValue">--</div>
+    <div class="data-label">WATT</div>
+  </div>
+  <div class="data-card">
+    <div class="data-value" id="cadenceValue">--</div>
+    <div class="data-label">KADENZ (rpm)</div>
+  </div>
+  <div class="data-card">
+    <div class="data-value" id="speedValue">--</div>
+    <div class="data-label">SPEED (km/h)</div>
+  </div>
+  <div class="data-card">
+    <div class="data-value" id="heartRateValue">--</div>
+    <div class="data-label">HERZFREQUENZ</div>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+// FTMS = Fitness Machine Service (Standard Bluetooth GATT Profil)
+const FTMS_SERVICE_UUID = 0x1826;
+const INDOOR_BIKE_DATA_CHAR_UUID = 0x2ad2;
+
+// Heart Rate Service (Standard)
+const HEART_RATE_SERVICE_UUID = 0x180d;
+const HEART_RATE_MEASUREMENT_CHAR_UUID = 0x2a37;
+
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+const connectBtn = document.getElementById('connectBtn');
+
+function log(msg) {
+  console.log(msg);
+  logEl.textContent = msg + '\n' + logEl.textContent;
+}
+
+function setStatus(text, className) {
+  statusEl.textContent = text;
+  statusEl.className = className || '';
+}
+
+// Parst die Indoor Bike Data Characteristic gemäss FTMS-Spezifikation
+function parseIndoorBikeData(dataView) {
+  let offset = 0;
+  const flags = dataView.getUint16(offset, true);
+  offset += 2;
+
+  const result = {};
+
+  // Bit 0 = 0 bedeutet: Instantaneous Speed IST vorhanden
+  const moreDataFlag = flags & 0x0001;
+  if (!moreDataFlag) {
+    result.speed = dataView.getUint16(offset, true) / 100; // km/h
+    offset += 2;
+  }
+
+  // Bit 1: Average Speed present
+  if (flags & 0x0002) {
+    offset += 2; // wir ignorieren Average Speed, überspringen nur
+  }
+
+  // Bit 2: Instantaneous Cadence present
+  if (flags & 0x0004) {
+    result.cadence = dataView.getUint16(offset, true) / 2; // rpm (0.5 Auflösung)
+    offset += 2;
+  }
+
+  // Bit 3: Average Cadence present
+  if (flags & 0x0008) {
+    offset += 2;
+  }
+
+  // Bit 4: Total Distance present (3 bytes!)
+  if (flags & 0x0010) {
+    offset += 3;
+  }
+
+  // Bit 5: Resistance Level present
+  if (flags & 0x0020) {
+    offset += 2;
+  }
+
+  // Bit 6: Instantaneous Power present
+  if (flags & 0x0040) {
+    result.power = dataView.getInt16(offset, true); // Watt
+    offset += 2;
+  }
+
+  // weitere Felder (Average Power, Energy, HR, etc.) folgen danach,
+  // für den ersten Test brauchen wir die nicht.
+
+  return result;
+}
+
+function parseHeartRate(dataView) {
+  const flags = dataView.getUint8(0);
+  const is16bit = flags & 0x1;
+  const hr = is16bit ? dataView.getUint16(1, true) : dataView.getUint8(1);
+  return hr;
+}
+
+async function connectTrainer() {
+  try {
+    setStatus('Suche Trainer...', '');
+    log('Öffne Bluetooth-Geräteauswahl für FTMS...');
+
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [FTMS_SERVICE_UUID] }],
+      optionalServices: [HEART_RATE_SERVICE_UUID]
+    });
+
+    log('Gerät gewählt: ' + device.name);
+    setStatus('Verbinde mit ' + device.name + '...', '');
+
+    device.addEventListener('gattserverdisconnected', () => {
+      setStatus('Verbindung getrennt', 'error');
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FTMS_SERVICE_UUID);
+    const characteristic = await service.getCharacteristic(INDOOR_BIKE_DATA_CHAR_UUID);
+
+    await characteristic.startNotifications();
+    characteristic.addEventListener('characteristicvaluechanged', (event) => {
+      const data = parseIndoorBikeData(event.target.value);
+      if (data.power !== undefined) {
+        document.getElementById('powerValue').textContent = data.power;
+      }
+      if (data.cadence !== undefined) {
+        document.getElementById('cadenceValue').textContent = data.cadence;
+      }
+      if (data.speed !== undefined) {
+        document.getElementById('speedValue').textContent = data.speed.toFixed(1);
+      }
+    });
+
+    setStatus('Verbunden mit ' + device.name, 'connected');
+    log('Live-Daten werden empfangen.');
+
+  } catch (error) {
+    console.error(error);
+    setStatus('Fehler: ' + error.message, 'error');
+    log('Fehler: ' + error.message);
+  }
+}
+
+connectBtn.addEventListener('click', connectTrainer);
+
+// Web Bluetooth Verfügbarkeit prüfen
+if (!navigator.bluetooth) {
+  setStatus('Web Bluetooth wird von diesem Browser nicht unterstützt. Bitte Chrome auf Android verwenden.', 'error');
+  connectBtn.disabled = true;
+}
+</script>
+
+</body>
+</html>
