@@ -73,6 +73,8 @@
 <h1>🚴 Trainer Test — Van Rysel D100</h1>
 <div id="status">Nicht verbunden</div>
 <button id="connectBtn">Trainer verbinden</button>
+<div id="hrStatus" style="margin-top:-10px; margin-bottom: 15px; font-size:0.85em; color:#999;">Herzfrequenz: nicht verbunden</div>
+<button id="connectHrBtn" style="background:#a83258;">Herzfrequenz-Sensor verbinden (Watch)</button>
 
 <div class="data-grid">
   <div class="data-card">
@@ -223,7 +225,45 @@ async function connectTrainer() {
   }
 }
 
+async function connectHeartRate() {
+  const hrStatusEl = document.getElementById('hrStatus');
+  try {
+    hrStatusEl.textContent = 'Herzfrequenz: Suche Sensor...';
+    log('Öffne Bluetooth-Geräteauswahl für Heart Rate...');
+
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [HEART_RATE_SERVICE_UUID] }]
+    });
+
+    log('HF-Gerät gewählt: ' + device.name);
+    hrStatusEl.textContent = 'Herzfrequenz: Verbinde mit ' + device.name + '...';
+
+    device.addEventListener('gattserverdisconnected', () => {
+      hrStatusEl.textContent = 'Herzfrequenz: Verbindung getrennt';
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(HEART_RATE_SERVICE_UUID);
+    const characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR_UUID);
+
+    await characteristic.startNotifications();
+    characteristic.addEventListener('characteristicvaluechanged', (event) => {
+      const hr = parseHeartRate(event.target.value);
+      document.getElementById('heartRateValue').textContent = hr;
+    });
+
+    hrStatusEl.textContent = 'Herzfrequenz: Verbunden mit ' + device.name;
+    log('HF-Live-Daten werden empfangen.');
+
+  } catch (error) {
+    console.error(error);
+    hrStatusEl.textContent = 'Herzfrequenz-Fehler: ' + error.message;
+    log('HF-Fehler: ' + error.message);
+  }
+}
+
 connectBtn.addEventListener('click', connectTrainer);
+document.getElementById('connectHrBtn').addEventListener('click', connectHeartRate);
 
 // Web Bluetooth Verfügbarkeit prüfen
 if (!navigator.bluetooth) {
