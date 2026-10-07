@@ -100,6 +100,18 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
 .stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 .result{border:1px solid var(--acc);background:rgba(255,106,26,.08);border-radius:12px;padding:12px;margin:10px 0}
 .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:10px}
+/* Plan */
+.wkrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.wkrow:last-child{border-bottom:0}
+.wkrow .chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer;font-size:14px;padding:0;background:transparent}
+.wkrow .chk.done{background:var(--ok);border-color:var(--ok);color:#06210f}
+.wkrow .info{flex:1;min-width:0;cursor:pointer}
+.wkrow .info b{display:block}
+.wkrow.next{background:rgba(255,106,26,.07);margin:0 -14px;padding:9px 14px}
+.wkhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.prog{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin:10px 0 4px}.prog i{display:block;height:100%;background:var(--acc)}
+.choice{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.choice button.sel{border-color:var(--acc);background:rgba(255,106,26,.12)}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#252b36;border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
 </style>
@@ -116,12 +128,14 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
 </header>
 <div id="liveStrip" class="live hidden"></div>
 <nav class="tabs">
-  <button data-tab="workouts" class="act">Trainings</button>
+  <button data-tab="plan" class="act">Plan</button>
+  <button data-tab="workouts">Trainings</button>
   <button data-tab="history">Verlauf</button>
   <button data-tab="settings">Einstellungen</button>
 </nav>
 <main>
-  <section id="tab-workouts" class="act">
+  <section id="tab-plan" class="act"><div id="planView"></div></section>
+  <section id="tab-workouts">
     <div id="btBanner"></div>
     <div class="card ftpcard" id="ftpCard"></div>
     <div id="wkList"></div>
@@ -294,6 +308,57 @@ const BUILTIN = (() => {
   ];
 })();
 const allWorkouts = () => [...BUILTIN, ...LS.get('rr_custom', [])];
+
+/* ---------- Trainingsplan (6-Wochen-VO2max-Block) ---------- */
+const WB = (() => {
+  const ss = (m, p, l, tag) => ({dur:Math.round(m*60), p0:p, p1:p, kind:'erg', label:l, tag});
+  const rp = (m, a, b, l) => ({dur:Math.round(m*60), p0:a, p1:b, kind:'erg', label:l});
+  const reps = (n, fn) => Array.from({length:n}, (_, i) => fn(i+1, n)).flat();
+  return {ss, rp, reps, WU:(m=10) => rp(m, 0.5, 0.75, 'Einfahren'), CD:(m=8) => rp(m, 0.6, 0.4, 'Ausfahren')};
+})();
+const pc = p => Math.round(p*100);
+const PW = {
+  vo2:(n, m, p, rest=3, name) => ({type:'hart', name:name || `VO2max ${n} × ${m} min`, desc:`${n} × ${m} min @ ${pc(p)} % FTP, ${rest} min Pause. Gleichmässig fahren, das letzte Intervall soll hart, aber machbar sein.`,
+    segs:[WU(10), WB.ss(2, .5, 'Locker'), ...WB.reps(n, (i, k) => [WB.ss(m, p, `VO2 ${i}/${k}`), WB.ss(rest, .5, 'Pause')]), WB.CD(7)]}),
+  t3015:(sets, r, p) => ({type:'hart', name:`30/15 – ${sets} × ${r}`, desc:`${sets} Sätze à ${r} × (30 s @ ${pc(p)} % / 15 s locker), 3 min Satzpause.`,
+    segs:[WU(12), WB.ss(3, .5, 'Locker'), ...WB.reps(sets, (s, ns) => [...WB.reps(r, (i, n) => [WB.ss(.5, p, `Satz ${s}/${ns} · ${i}/${n}`), WB.ss(.25, .55, '15 s locker')]), WB.ss(3, .5, 'Satzpause')]), WB.CD(8)]}),
+  sst:(n, m, p, rest) => ({type:'mittel', name:`${p >= .94 ? 'Schwelle' : 'Sweet Spot'} ${n} × ${m} min`, desc:`${n} × ${m} min @ ${pc(p)} % FTP, ${rest} min Pause. Stärkt die Basis für die VO2max-Intervalle.`,
+    segs:[WU(10), ...WB.reps(n, (i, k) => [WB.ss(m, p, `${p >= .94 ? 'Schwelle' : 'Sweet Spot'} ${i}/${k}`), WB.ss(rest, .55, 'Pause')]), WB.CD(6)]}),
+  z2:(m) => ({type:'locker', name:`Grundlage ${m} min`, desc:'Zone 2 @ 68 % FTP – locker, du kannst dich noch unterhalten. Baut die aerobe Basis auf.',
+    segs:[WB.rp(5, .45, .65, 'Einfahren'), WB.ss(m - 10, .68, 'Zone 2'), WB.rp(5, .6, .45, 'Ausfahren')]}),
+  rec:() => ({type:'locker', name:'Erholung 30 min', desc:'Ganz locker @ 50 % FTP.', segs:[WB.ss(30, .5, 'Erholung')]}),
+  act:() => ({type:'locker', name:'Aktivierung vor dem Test', desc:'Locker mit 3 kurzen Steigerungen – Beine wach machen, nicht ermüden.',
+    segs:[WU(10), WB.ss(8, .6, 'Locker'), ...WB.reps(3, (i, n) => [WB.ss(1, 1.1, `Steigerung ${i}/${n}`), WB.ss(2, .5, 'Locker')]), WB.CD(6)]}),
+  ramp:() => ({...BUILTIN.find(w => w.id === 'ramp'), type:'test', name:'Rampentest – Abschlusstest'}),
+};
+const WU = WB.WU;
+const PLAN_WEEKS = [
+  {label:'Aufbau 1', s:{vo2:() => PW.vo2(4, 4, 1.10), hi2:() => PW.t3015(2, 10, 1.20), ss:() => PW.sst(3, 10, .88, 4), z2:() => PW.z2(60)}},
+  {label:'Aufbau 2', s:{vo2:() => PW.vo2(5, 3, 1.15), hi2:() => PW.t3015(2, 13, 1.22), ss:() => PW.sst(3, 12, .90, 4), z2:() => PW.z2(70)}},
+  {label:'Aufbau 3', s:{vo2:() => PW.vo2(5, 4, 1.12), hi2:() => PW.t3015(3, 13, 1.25), ss:() => PW.sst(2, 20, .90, 5), z2:() => PW.z2(80)}},
+  {label:'Erholungswoche', fixed:[() => PW.z2(45), () => PW.vo2(3, 3, 1.08, 3, 'Kurz & frisch 3 × 3 min'), () => PW.rec(), () => PW.z2(45)]},
+  {label:'Höhepunkt', s:{vo2:() => PW.vo2(6, 3, 1.18), hi2:() => PW.t3015(3, 13, 1.27), ss:() => PW.sst(2, 20, .95, 5), z2:() => PW.z2(90)}},
+  {label:'Testwoche', test:true},
+];
+const PLAN_ORDER = {2:['vo2', 'z2'], 3:['vo2', 'ss', 'z2'], 4:['vo2', 'z2', 'hi2', 'ss']};
+const PLAN_DAYS = {2:'z.B. Dienstag + Samstag', 3:'z.B. Dienstag · Donnerstag · Samstag', 4:'z.B. Dienstag · Mittwoch · Freitag · Sonntag'};
+function planWeeks(plan){
+  const n = plan.perWeek;
+  return PLAN_WEEKS.map((wk, wi) => {
+    let list;
+    if (wk.test) list = n === 2 ? [PW.act(), PW.ramp()] : n === 3 ? [PW.z2(45), PW.act(), PW.ramp()] : [PW.z2(45), PW.rec(), PW.act(), PW.ramp()];
+    else if (wk.fixed) list = wk.fixed.slice(0, n).map(f => f());
+    else list = PLAN_ORDER[n].map(k => wk.s[k]());
+    return {label:wk.label, sessions:list.map((w, si) => ({...w, id:`plan_${wi}_${si}`, planKey:`${wi}_${si}`, cat:'plan'}))};
+  });
+}
+function planFind(key){ const p = prof().plan; if (!p) return null; for (const wk of planWeeks(p)) for (const s of wk.sessions) if (s.planKey === key) return s; return null; }
+function startPlan(n){ prof().plan = {start:Date.now(), perWeek:n, done:{}, ftpStart:settings.ftp}; saveSettings(); renderPlan(); toast(`Plan gestartet – ${n} Trainings pro Woche`); }
+function markPlanDone(key, on = true){
+  const p = prof().plan; if (!p) return;
+  if (on) p.done[key] = Date.now(); else delete p.done[key];
+  saveSettings(); renderPlan();
+}
 const totalOf = w => w.segs.reduce((a, s) => a + s.dur, 0);
 function durLabel(w){ if (w.test === 'ramp') return 'ca. 20 min'; if (w.openEnd) return 'offen'; return Math.round(totalOf(w)/60) + ' min'; }
 function tssEst(w){
@@ -802,6 +867,9 @@ function finishRide(){
       s:{p:S.map(x => x.p), c:S.map(x => x.c), h:S.map(x => x.h), v:S.map(x => Math.round(x.v*10)/10)}};
     saveHistory(entry);
   }
+  if (r.w.planKey && prof().plan && (r.elapsed >= r.w.total*0.8 || (r.w.test === 'ramp' && r.rampDone))){
+    markPlanDone(r.w.planKey); setTimeout(() => toast('Plan: Training erledigt ✓'), 400);
+  }
   $('#ride').classList.add('hidden'); ride = null;
   showSummary(entry || {...sum, name:r.w.name}, !!sum.test);
   renderHistory();
@@ -941,7 +1009,52 @@ function renderLiveStrip(){
   if (on) el.innerHTML = `<b>${Math.round(pw3())}</b> W · <b>${hasCad() ? Math.round(live.cad) : '–'}</b> rpm · <b>${live.hr ? Math.round(live.hr) : '–'}</b> bpm` +
     (demo ? ' · <span style="color:var(--warn)">Demo</span>' : '') + (trainer.connected && !demo ? ` · ${trainer.ergNative ? 'ERG bereit' : 'ERG über App'}` : '');
 }
-function renderAll(){ $('#pProfile span').textContent = prof().name; renderWorkouts(); renderHistory(); renderSettings(); }
+function renderPlan(){
+  const el = $('#planView'), p = prof().plan;
+  if (!p){
+    const sel = settings._planN || 3;
+    el.innerHTML = `<div class="card"><div class="muted s">Trainingsplan für <b style="color:var(--acc)">${esc(prof().name)}</b></div>
+      <h3 style="margin:6px 0">6-Wochen-Block: VO2max steigern</h3>
+      <p class="muted s" style="margin:0 0 6px">3 Aufbauwochen mit steigender Belastung, 1 Erholungswoche, 1 Höhepunkt-Woche und am Schluss ein Rampentest. Alle Watt richten sich nach deiner aktuellen FTP (<b>${settings.ftp} W</b>).</p>
+      ${(settings.ftpLog || []).length ? '' : '<div class="banner">Noch kein FTP-Test in diesem Profil – mach zuerst den Rampentest, sonst stimmen die Watt nicht.</div>'}
+      <div class="muted s" style="margin-top:8px">Wie oft pro Woche kannst du trainieren?</div>
+      <div class="choice">${[2, 3, 4].map(n => `<button data-pn="${n}" class="${n === sel ? 'sel' : ''}">${n}× pro Woche</button>`).join('')}</div>
+      <div class="muted s">${PLAN_DAYS[sel]} – zwischen harten Trainings mindestens 1 Tag Pause.</div>
+      <div class="btns" style="justify-content:flex-start"><button class="primary" id="planGo">Plan starten</button></div></div>`;
+    $('#planGo').onclick = () => startPlan(sel);
+    return;
+  }
+  const weeks = planWeeks(p), all = weeks.flatMap(w => w.sessions), doneN = all.filter(s => p.done[s.planKey]).length;
+  const next = all.find(s => !p.done[s.planKey]);
+  const typeCol = {hart:'#f97316', mittel:'#facc15', locker:'#3b82f6', test:'#ef4444'};
+  const head = `<div class="card"><div class="wkhead"><div><div class="muted s">Plan von <b style="color:var(--acc)">${esc(prof().name)}</b> · ${p.perWeek}× pro Woche · seit ${dateCH(p.start)}</div>
+      <b>6-Wochen-Block VO2max</b></div><div class="muted s">${doneN}/${all.length}</div></div>
+      <div class="prog"><i style="width:${doneN/all.length*100}%"></i></div>
+      <div class="muted s">Watt basieren auf FTP ${settings.ftp} W${p.ftpStart && p.ftpStart !== settings.ftp ? ` (Start: ${p.ftpStart} W)` : ''} · ${PLAN_DAYS[p.perWeek]}</div></div>`;
+  const nextHtml = next ? `<h2>Nächstes Training</h2><div class="card wk" data-plan="${next.planKey}">
+      <div class="t">${esc(next.name)}</div><div class="d">${esc(next.desc)}</div>${profileSVG(next)}
+      <div class="meta"><span>⏱ ${durLabel(next)}</span><span>TSS ${tssEst(next)}</span><span style="margin-left:auto;color:var(--acc);font-weight:650">Starten ›</span></div></div>`
+    : `<div class="card result"><b>Block abgeschlossen! 🎉</b><p class="muted s">Übernimm das Testergebnis als neue FTP und starte den nächsten Block – er baut automatisch auf der neuen FTP auf.</p>
+       <div class="btns" style="justify-content:flex-start"><button class="primary" id="planNew">Neuen Block starten</button></div></div>`;
+  const curWeek = next ? weeks.findIndex(w => w.sessions.includes(next)) : -1;
+  const weeksHtml = weeks.map((wk, wi) => {
+    const tss = wk.sessions.reduce((a, s) => a + (parseInt(tssEst(s)) || 30), 0);
+    return `<h2>Woche ${wi+1} · ${wk.label}${wi === curWeek ? ' · <span style="color:var(--acc)">aktuell</span>' : ''}</h2><div class="card">
+      ${wk.sessions.map(s => { const d = p.done[s.planKey]; return `<div class="wkrow ${next === s ? 'next' : ''}">
+        <button class="chk ${d ? 'done' : ''}" data-pdone="${s.planKey}" title="${d ? 'als offen markieren' : 'als erledigt markieren'}">${d ? '✓' : ''}</button>
+        <div class="info" data-plan="${s.planKey}"><b>${esc(s.name)}</b><span class="muted s"><span class="sw" style="background:${typeCol[s.type] || '#8a91a3'};width:8px;height:8px"></span>${s.type} · ${durLabel(s)}${d ? ` · erledigt ${dateCH(d)}` : ''}</span></div>
+        <button data-plan="${s.planKey}">Start</button></div>`; }).join('')}
+      <div class="muted s" style="margin-top:6px">Wochen-TSS ca. ${tss}</div></div>`;
+  }).join('');
+  el.innerHTML = head + nextHtml + weeksHtml + `<h2>Tipps</h2><div class="card muted s">
+      • VO2max-Intervalle zu leicht? Beim nächsten Mal mit + die Intensität um 5 % erhöhen. Bricht das letzte Intervall ein: −5 %.<br>
+      • Grundlage wirklich locker fahren – die harten Tage werden dadurch besser.<br>
+      • Krank oder sehr müde: Training auslassen statt durchbeissen. Verpasste Einheiten einfach in der Folgewoche nachholen.</div>
+      <div class="btns" style="justify-content:flex-start;margin-bottom:20px"><button id="planStop">Plan beenden</button></div>`;
+  const nb = $('#planNew'); if (nb) nb.onclick = () => { prof().plan = null; saveSettings(); renderPlan(); };
+  $('#planStop').onclick = () => { if (confirm('Plan beenden? Der Fortschritt wird gelöscht.')){ prof().plan = null; saveSettings(); renderPlan(); } };
+}
+function renderAll(){ $('#pProfile span').textContent = prof().name; renderPlan(); renderWorkouts(); renderHistory(); renderSettings(); }
 
 /* ---------- Events ---------- */
 $('#pProfile').onclick = openProfiles;
@@ -961,6 +1074,9 @@ $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeM
 document.addEventListener('click', e => {
   const d = e.target.closest('[data-del]');
   if (d){ e.stopPropagation(); if (confirm('Training löschen?')){ LS.set('rr_custom', LS.get('rr_custom', []).filter(w => w.id !== d.dataset.del)); renderWorkouts(); } return; }
+  const pd = e.target.closest('[data-pdone]'); if (pd){ const k = pd.dataset.pdone; markPlanDone(k, !prof().plan.done[k]); return; }
+  const pl = e.target.closest('[data-plan]'); if (pl){ const w = planFind(pl.dataset.plan); if (w) openRide(w); return; }
+  const pn = e.target.closest('[data-pn]'); if (pn){ settings._planN = +pn.dataset.pn; renderPlan(); return; }
   const st = e.target.closest('[data-start]'); if (st){ const w = allWorkouts().find(x => x.id === st.dataset.start); if (w) openRide(w); return; }
   const tc = e.target.closest('[data-tcx]'); if (tc){ exportTcx(tc.dataset.tcx); return; }
   const hd = e.target.closest('[data-hdel]');
