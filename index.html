@@ -151,7 +151,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
     <div class="card"><p class="muted s" style="margin-top:0">Zwift-Workouts (.zwo, z.B. von whatsonzwift.com) importieren – die Leistung wird automatisch auf deine FTP skaliert.</p>
       <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
     <h2>Zwift Click – Diagnose</h2>
-    <div class="card"><p class="muted s" style="margin-top:0">Falls die Click-Tasten nicht reagieren: verbinden, Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
+    <div class="card"><p class="muted s" style="margin-top:0">Click v2: Mit Fremd-Apps funktioniert die <b>rechte</b> Einheit (Taste + = mehr, B = weniger). Die linke ist von Zwift gesperrt. Reagiert nichts: Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
     <h2>Daten</h2>
     <div class="card"><button id="btnWipe">Alle Daten löschen</button></div>
   </section>
@@ -320,7 +320,8 @@ function profileSVG(w){
 }
 
 /* ---------- Live-Daten ---------- */
-const live = {power:0, cad:0, speed:0, hr:0, lastBike:0, lastHr:0};
+const live = {power:0, cad:0, speed:0, hr:0, lastBike:0, lastHr:0, cadEver:false};
+const hasCad = () => demo || live.cadEver;
 const pwBuf = [];
 const pw3 = () => pwBuf.length ? pwBuf.reduce((a, b) => a + b, 0)/pwBuf.length : 0;
 let demo = false;
@@ -328,7 +329,7 @@ let demo = false;
 /* ---------- Bluetooth: Trainer (FTMS) ---------- */
 const trainer = {dev:null, cp:null, connected:false, ergNative:true, simSupported:true, maxPower:600, manual:false};
 const hrm = {dev:null, connected:false, manual:false};
-const click = {dev:null, connected:false, manual:false, prevPlus:false, prevMinus:false, log:[]};
+const click = {log:[]};
 const bound = new WeakSet();
 function bindOnce(ch, fn){ if (bound.has(ch)) return; bound.add(ch); ch.addEventListener('characteristicvaluechanged', fn); }
 function setPill(id, state){ const b = $(id); b.classList.remove('on', 'busy'); if (state) b.classList.add(state); }
@@ -348,7 +349,7 @@ function parseBike(dv){
     let o = 0; const f = dv.getUint16(o, true); o += 2;
     if (!(f & 1)){ live.speed = dv.getUint16(o, true)/100; o += 2; }
     if (f & 2) o += 2;
-    if (f & 4){ live.cad = dv.getUint16(o, true)/2; o += 2; }
+    if (f & 4){ live.cad = dv.getUint16(o, true)/2; o += 2; if (live.cad > 0) live.cadEver = true; }
     if (f & 8) o += 2;
     if (f & 16) o += 3;
     if (f & 32) o += 2;
@@ -453,29 +454,67 @@ async function connectHr(){
   } catch(e){ setPill('#pHr', hrm.connected ? 'on' : null); if (e.name !== 'NotFoundError') toast('Pulsgurt: ' + e.message); }
 }
 
-/* ---------- Bluetooth: Zwift Click (experimentell) ---------- */
+/* ---------- Bluetooth: Zwift Click (v1 und v2) ----------
+   Click v1: eigener Zwift-Service, Meldung 0x37.
+   Click v2: zwei Einheiten (links/rechts), Service 0xFC82 oder Zwift-Service, Meldung 0x23 (Tasten-Bitmaske, 0 = gedrückt).
+   Die RECHTE v2-Einheit funktioniert mit Fremd-Apps (+ = mehr, B = weniger). Die linke ist von Zwift gesperrt
+   und sendet nur, wenn sie in den letzten ~24 h in Zwift benutzt wurde. */
 const CK = id => `0000000${id}-19ca-4651-86e5-fa29dcdd09d1`;
-async function setupClick(dev){
-  const server = await dev.gatt.connect();
-  const svc = await server.getPrimaryService(CK(1));
-  const as = await svc.getCharacteristic(CK(2)); bindOnce(as, e => onClickData(e.target.value, 'A')); await as.startNotifications();
-  try { const tx = await svc.getCharacteristic(CK(4)); bindOnce(tx, e => onClickData(e.target.value, 'S')); await tx.startNotifications(); } catch(e){}
-  const rx = await svc.getCharacteristic(CK(3));
-  await gattWrite(rx, new TextEncoder().encode('RideOn'));
-  click.connected = true;
+const ZW_RIDE_SVC = 0xfc82, ZW_MANUF = 0x094a;
+const RIDE_ON = [0x52, 0x69, 0x64, 0x65, 0x4f, 0x6e];
+const M = {A:0x10, B:0x20, Y:0x40, Z:0x100, UP_L:0x200, DN_L:0x400, UP_R:0x2000, DN_R:0x4000, UP:0x2, DOWN:0x8};
+const PLUS_MASK = M.UP_R | M.DN_R | M.A | M.Y | M.UP;        // rechtes + (und A/Y/Pfeil hoch)
+const MINUS_MASK = M.B | M.Z | M.UP_L | M.DN_L | M.DOWN;     // B (rechts), − (links, falls entsperrt), Pfeil runter
+const clicks = [];   // verbundene Click-Einheiten
+function clickLog(line){ click.log.unshift(line); if (click.log.length > 20) click.log.pop(); const el = $('#clickLog'); if (el) el.textContent = click.log.join('\n'); }
+function updateClickPill(){ const n = clicks.filter(c => c.connected).length; setPill('#pClick', n ? 'on' : null); $('#pClick span').textContent = n > 1 ? `Click ×${n}` : 'Click'; }
+async function writeNoResp(ch, arr){
+  const d = new Uint8Array(arr);
+  if (ch.writeValueWithoutResponse && ch.properties && ch.properties.writeWithoutResponse) return ch.writeValueWithoutResponse(d);
+  return gattWrite(ch, d);
 }
-async function connectClick(){
+async function setupClick(c){
+  const server = await c.dev.gatt.connect();
+  let svc = null, kind = '';
+  try { svc = await server.getPrimaryService(ZW_RIDE_SVC); kind = 'v2'; } catch(e){}
+  if (!svc){ svc = await server.getPrimaryService(CK(1)); kind = 'v1'; }
+  const as = await svc.getCharacteristic(CK(2)); bindOnce(as, e => onClickData(e.target.value, c)); await as.startNotifications();
+  try { const tx = await svc.getCharacteristic(CK(4)); bindOnce(tx, e => onClickData(e.target.value, c, true)); await tx.startNotifications(); } catch(e){}
+  const rx = await svc.getCharacteristic(CK(3));
+  await writeNoResp(rx, kind === 'v2' ? [...RIDE_ON, 0x02, 0x03] : RIDE_ON);
+  c.kind = kind; c.connected = true;
+  clickLog(`✓ ${c.dev.name || 'Zwift'} verbunden (${kind === 'v2' ? 'Click v2 / Ride' : 'Click v1'})`);
+}
+function clickMenu(){
+  const list = clicks.filter(c => c.connected).map(c => `<li>${esc(c.dev.name || 'Zwift')} · ${c.kind === 'v2' ? 'Click v2' : 'Click v1'}</li>`).join('');
+  openModal(`<h3>Zwift Click</h3><p class="muted s">Verbunden:</p><ul>${list}</ul>
+    <p class="muted s">Click v2 hat zwei Einheiten. Mit Fremd-Apps funktioniert zuverlässig nur die <b>rechte</b> (Taste <b>+</b> = mehr, <b>B</b> = weniger). Reagiert nichts, die andere Einheit dazu verbinden.</p>
+    <div class="btns"><button id="ckAdd">Weitere Einheit verbinden</button><button id="ckOff">Alle trennen</button><button class="primary" onclick="closeModal()">Schliessen</button></div>`);
+  $('#ckAdd').onclick = () => { closeModal(); connectClick(true); };
+  $('#ckOff').onclick = () => { closeModal(); clicks.forEach(c => { c.manual = true; try { c.dev.gatt.disconnect(); } catch(e){} }); clicks.length = 0; updateClickPill(); };
+}
+async function connectClick(force){
   if (!btOk()) return;
-  if (click.connected){ if (confirm('Zwift Click trennen?')){ click.manual = true; click.dev.gatt.disconnect(); } return; }
+  if (!force && clicks.some(c => c.connected)){ clickMenu(); return; }
+  const opts = {filters:[{namePrefix:'Zwift'}, {services:[ZW_RIDE_SVC]}, {manufacturerData:[{companyIdentifier:ZW_MANUF}]}], optionalServices:[CK(1), ZW_RIDE_SVC]};
+  let dev;
   try {
     setPill('#pClick', 'busy');
-    const dev = await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Zwift'}], optionalServices:[CK(1)]});
-    click.dev = dev; click.manual = false;
+    try { dev = await navigator.bluetooth.requestDevice(opts); }
+    catch(e){ if (e.name !== 'TypeError') throw e;   // Browser kennt den Hersteller-Filter nicht
+      dev = await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Zwift'}], optionalServices:[CK(1), ZW_RIDE_SVC]}); }
+    let c = clicks.find(x => x.dev.id === dev.id);
+    if (!c){ c = {dev, connected:false, manual:false, kind:'', prevPlus:false, prevMinus:false}; clicks.push(c); }
+    c.manual = false;
     if (!bound.has(dev)){ bound.add(dev); dev.addEventListener('gattserverdisconnected', async () => {
-      click.connected = false; setPill('#pClick', null); if (click.manual) return;
-      for (let i = 1; i <= 4; i++){ await sleep(2000*i); try { await setupClick(dev); setPill('#pClick', 'on'); return; } catch(e){} } }); }
-    await setupClick(dev); setPill('#pClick', 'on'); toast('Zwift Click verbunden – Tasten: +/−');
-  } catch(e){ setPill('#pClick', click.connected ? 'on' : null); if (e.name !== 'NotFoundError') toast('Click: ' + e.message); }
+      c.connected = false; updateClickPill(); clickLog(`✕ ${dev.name || 'Zwift'} getrennt`); if (c.manual) return;
+      for (let i = 1; i <= 8; i++){ await sleep(2000*i); if (c.manual) return; try { await setupClick(c); updateClickPill(); return; } catch(e){} } }); }
+    await setupClick(c); updateClickPill();
+    toast(c.kind === 'v2' ? 'Click verbunden – Taste drücken zum Testen (rechts: + / B)' : 'Zwift Click verbunden – Tasten + / −');
+  } catch(e){
+    updateClickPill();
+    if (e.name !== 'NotFoundError'){ clickLog('Fehler: ' + e.message); toast('Click: ' + e.message + ' – Details unter Einstellungen'); }
+  }
 }
 function pbFields(b){
   const out = {}; let i = 0;
@@ -484,20 +523,19 @@ function pbFields(b){
     if (wt === 0) out[fn] = vint(); else if (wt === 2){ const l = vint(); i += l; } else if (wt === 5) i += 4; else if (wt === 1) i += 8; else break; }
   return out;
 }
-function onClickData(dv, src){
+function onClickData(dv, c, sync){
   const b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
-  click.log.unshift(src + ': ' + [...b].map(x => x.toString(16).padStart(2, '0')).join(' '));
-  if (click.log.length > 15) click.log.pop();
-  $('#clickLog').textContent = click.log.join('\n');
-  if (src !== 'A' || !b.length) return;
+  if (!b.length || b[0] === 0x15) return;   // 0x15 = leere Meldung, kommt laufend
+  clickLog((sync ? 'S ' : 'A ') + [...b].map(x => x.toString(16).padStart(2, '0')).join(' '));
+  if (sync) return;
   let plus = false, minus = false;
-  if (b[0] === 0x37){ const f = pbFields(b.subarray(1)); plus = f[1] === 0; minus = f[2] === 0; }          // Click v1
-  else if (b[0] === 0x23){ const f = pbFields(b.subarray(1)); if (f[1] === undefined) return;             // Click v2 / Ride
-    const pr = (~f[1]) >>> 0; plus = !!(pr & (0x2 | 0x200 | 0x2000)); minus = !!(pr & (0x8 | 0x400 | 0x4000)); }
+  if (b[0] === 0x37){ const f = pbFields(b.subarray(1)); plus = f[1] === 0; minus = f[2] === 0; }     // Click v1
+  else if (b[0] === 0x23 || b[0] === 0x07){ const f = pbFields(b.subarray(1)); if (f[1] === undefined) return;   // Click v2 / Ride / Play
+    const pressed = (~f[1]) >>> 0; plus = !!(pressed & PLUS_MASK); minus = !!(pressed & MINUS_MASK); }
   else return;
-  if (plus && !click.prevPlus) adjust(+1);
-  if (minus && !click.prevMinus) adjust(-1);
-  click.prevPlus = plus; click.prevMinus = minus;
+  if (plus && !c.prevPlus){ adjust(+1); if (!ride || !ride.running) toast('Click: + erkannt'); }
+  if (minus && !c.prevMinus){ adjust(-1); if (!ride || !ride.running) toast('Click: − erkannt'); }
+  c.prevPlus = plus; c.prevMinus = minus;
 }
 
 /* ---------- Ton & Bildschirm ---------- */
@@ -625,8 +663,9 @@ function everySecond(){
   if (r.roll.length === 30){ r.np4 += Math.pow(r.rollSum/30, 4); r.npN++; }
   if (seg.dur >= 10 && !r.w.openEnd){ const rem = Math.ceil(seg.start + seg.dur - r.t); if (rem >= 1 && rem <= 3) beep(660, 0.08, 0.12); }
   if (seg.tag === 'ramp' && tgt && r.t - r.rampStart > 120){
-    if (c < 45 || p < 0.5*tgt) r.failS++; else r.failS = 0;
-    if (r.failS >= 5){ endRamp(true); return; }
+    const p3 = pw3(), cadFail = hasCad() && c < 40;
+    if (p3 < 0.6*tgt || (cadFail && p3 < 0.85*tgt)) r.failS++; else r.failS = 0;
+    if (r.failS >= 8){ endRamp(true); return; }
   }
   applyResistance();
 }
@@ -672,7 +711,7 @@ function renderRide(){
   if (tgt != null && r.running && !r.paused){ const tol = Math.max(8, tgt*0.06); pe.style.color = Math.abs(pw - tgt) <= tol ? 'var(--ok)' : (pw < tgt ? 'var(--warn)' : ''); } else pe.style.color = '';
   $('#mTgt').textContent = tgt == null ? r.level : tgt;
   $('#mTgtSub').textContent = tgt == null ? `Stufe von 10 (${levelGrade(r.level)} %)` : `${Math.round(tgt/ftp*100)} % FTP · ${zoneOf(tgt/ftp).n}`;
-  $('#mCad').textContent = Math.round(live.cad);
+  $('#mCad').textContent = hasCad() ? Math.round(live.cad) : '–';
   $('#mHr').textContent = live.hr ? Math.round(live.hr) : '–';
   $('#mHrSub').textContent = live.hr && hrMaxEff() ? `bpm · ${hrZone(live.hr)}` : 'bpm';
   $('#mEl').textContent = fmt(r.elapsed);
@@ -899,7 +938,7 @@ function renderSettings(){
 function renderLiveStrip(){
   const el = $('#liveStrip'), on = trainer.connected || demo || hrm.connected;
   el.classList.toggle('hidden', !on);
-  if (on) el.innerHTML = `<b>${Math.round(pw3())}</b> W · <b>${Math.round(live.cad)}</b> rpm · <b>${live.hr ? Math.round(live.hr) : '–'}</b> bpm` +
+  if (on) el.innerHTML = `<b>${Math.round(pw3())}</b> W · <b>${hasCad() ? Math.round(live.cad) : '–'}</b> rpm · <b>${live.hr ? Math.round(live.hr) : '–'}</b> bpm` +
     (demo ? ' · <span style="color:var(--warn)">Demo</span>' : '') + (trainer.connected && !demo ? ` · ${trainer.ergNative ? 'ERG bereit' : 'ERG über App'}` : '');
 }
 function renderAll(){ $('#pProfile span').textContent = prof().name; renderWorkouts(); renderHistory(); renderSettings(); }
