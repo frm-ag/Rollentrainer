@@ -1,276 +1,956 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trainer Test - Van Rysel D100</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Rolle – Indoor-Training</title>
 <style>
-  body {
-    font-family: -apple-system, Arial, sans-serif;
-    background: #1a1a1a;
-    color: #fff;
-    margin: 0;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-height: 100vh;
-  }
-  h1 { font-size: 1.3em; color: #2f6690; }
-  #status {
-    padding: 10px 20px;
-    border-radius: 8px;
-    background: #333;
-    margin-bottom: 20px;
-    font-size: 0.9em;
-  }
-  #status.connected { background: #1e5c2e; }
-  #status.error { background: #5c1e1e; }
-  button {
-    background: #2f6690;
-    color: white;
-    border: none;
-    padding: 16px 32px;
-    font-size: 1.1em;
-    border-radius: 10px;
-    margin-bottom: 30px;
-  }
-  button:active { background: #1f4a6e; }
-  .data-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    width: 100%;
-    max-width: 400px;
-  }
-  .data-card {
-    background: #2a2a2a;
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-  }
-  .data-value {
-    font-size: 2.5em;
-    font-weight: bold;
-    color: #4fa8d8;
-  }
-  .data-label {
-    font-size: 0.85em;
-    color: #999;
-    margin-top: 4px;
-  }
-  #log {
-    margin-top: 30px;
-    font-size: 0.75em;
-    color: #666;
-    max-width: 400px;
-    word-break: break-all;
-  }
+:root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--line:#2a2f3a;--text:#e8eaf0;--muted:#8a91a3;--acc:#ff6a1a;--ok:#22c55e;--warn:#facc15;--bad:#ef4444}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+button,.btn{font:inherit;color:inherit;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer;display:inline-block}
+button:active,.btn:active{transform:scale(.98)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.35;cursor:default}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:rgba(15,17,21,.96);border-bottom:1px solid var(--line)}
+.brand{font-weight:800;font-size:20px;letter-spacing:.5px}.brand b{color:var(--acc)}
+.conn{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pill{padding:6px 11px;border-radius:999px;font-size:13px;display:flex;align-items:center;gap:6px}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:#555}
+.pill.on::before{background:var(--ok)}.pill.busy::before{background:var(--warn)}
+.pill.prof{border-color:var(--acc);color:var(--acc);font-weight:650}.pill.prof::before{display:none}
+.plist{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.pbtn{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px}.pbtn span{color:var(--muted);font-size:13px}.pbtn.act{border-color:var(--acc);background:rgba(255,106,26,.1)}
+input[type=text]{width:160px;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit}
+.live{padding:8px 16px;background:var(--card);border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
+.live b{color:var(--text)}
+nav.tabs{display:flex;gap:4px;padding:6px 12px;border-bottom:1px solid var(--line);max-width:980px;margin:0 auto}
+nav.tabs button{background:transparent;border:0;border-radius:0;color:var(--muted);padding:10px 12px}
+nav.tabs button.act{color:var(--text);box-shadow:inset 0 -2px 0 var(--acc)}
+main{max-width:980px;margin:0 auto;padding:16px}
+section{display:none}section.act{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:22px 0 8px}
+.note{color:var(--muted);font-size:13px;margin:-2px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.wk{cursor:pointer;margin:0;display:flex;flex-direction:column;gap:8px}
+.wk:hover{border-color:#3d4453}
+.wk .t{font-weight:650}.wk .d{color:var(--muted);font-size:13px;flex:1}
+.wk svg{width:100%;height:54px;display:block;background:var(--card2);border-radius:8px}
+.meta{display:flex;gap:14px;font-size:13px;color:var(--muted);align-items:center}
+.meta .del{margin-left:auto;cursor:pointer}
+.ftpcard{display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between}
+.big{font-size:42px;font-weight:800;line-height:1.05}
+.big small{font-size:18px;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}.s{font-size:13px}
+.banner{background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.35);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+input[type=number]{width:96px;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;text-align:right}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
+table.z{width:100%;border-collapse:collapse;font-size:14px}
+table.z td{padding:7px 4px;border-bottom:1px solid var(--line)}
+table.z tr:last-child td{border-bottom:0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;overflow:auto;max-height:200px;margin:0;white-space:pre-wrap}
+.hitem{display:flex;gap:10px;align-items:center}
+.hitem .hmain{flex:1;cursor:pointer;min-width:0}
+.hitem .t{font-weight:650}
+.ftpl{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px}.ftpl span{display:flex;flex-direction:column}.ftpl small{color:var(--muted)}
+/* Ride */
+.ride{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom));gap:8px;overflow:auto}
+.hidden{display:none!important}
+.rtop{display:flex;align-items:center;gap:10px}
+.rtop .n{font-weight:750;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metrics{display:grid;grid-template-columns:repeat(12,1fr);gap:8px}
+.m{grid-column:span 3;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;min-width:0}
+.m.pw,.m.tg{grid-column:span 6}
+.m label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.m span{font-size:clamp(26px,4.6vw,46px);font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.m.pw span,.m.tg span{font-size:clamp(44px,9vw,92px)}
+.m.tg span{color:var(--acc)}
+.m small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:700px){.metrics{grid-template-columns:repeat(2,1fr)}.m,.m.pw,.m.tg{grid-column:span 1}}
+.interval{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:14px}
+.interval .lbl{font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.interval .irem{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.interval .next{color:var(--muted);font-size:12px;text-align:right;max-width:40%}
+.bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--acc);width:0}
+.chartwrap{flex:1;min-height:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden}
+.chartwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+.ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.adj{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px}
+.adj button{width:54px;height:46px;font-size:24px;padding:0}
+.adj div{min-width:150px;text-align:center;font-weight:650}
+.ctrl>button{height:48px}
+.startov{position:absolute;inset:0;background:rgba(15,17,21,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px;z-index:2}
+.cd{font-size:130px;font-weight:900;color:var(--acc);line-height:1}
+/* Modal */
+.modal{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;max-width:580px;width:100%;max-height:92vh;overflow:auto}
+.modal h3{margin:0 0 6px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat{background:var(--card2);border-radius:10px;padding:8px 10px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.result{border:1px solid var(--acc);background:rgba(255,106,26,.08);border-radius:12px;padding:12px;margin:10px 0}
+.btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:10px}
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#252b36;border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
 </style>
 </head>
 <body>
+<header>
+  <div class="brand">Rol<b>le</b></div>
+  <div class="conn">
+    <button id="pProfile" class="pill prof"><span>Profil</span></button>
+    <button id="pTrainer" class="pill"><span>Trainer</span></button>
+    <button id="pHr" class="pill"><span>Puls</span></button>
+    <button id="pClick" class="pill"><span>Click</span></button>
+  </div>
+</header>
+<div id="liveStrip" class="live hidden"></div>
+<nav class="tabs">
+  <button data-tab="workouts" class="act">Trainings</button>
+  <button data-tab="history">Verlauf</button>
+  <button data-tab="settings">Einstellungen</button>
+</nav>
+<main>
+  <section id="tab-workouts" class="act">
+    <div id="btBanner"></div>
+    <div class="card ftpcard" id="ftpCard"></div>
+    <div id="wkList"></div>
+  </section>
+  <section id="tab-history"><div id="histList"></div></section>
+  <section id="tab-settings">
+    <h2 style="margin-top:4px">Profil – Körperdaten</h2>
+    <div class="card">
+      <div class="row"><div><b>Name</b></div><input type="text" id="sName" maxlength="20"></div>
+      <div class="row"><div><b>FTP</b><div class="muted s">Basis aller Trainings (wird nach einem Test übernommen)</div></div><div><input type="number" id="sFtp" min="50" max="600"> W</div></div>
+      <div class="row"><div><b>Gewicht</b><div class="muted s">für W/kg und VO2max-Schätzung</div></div><div><input type="number" id="sKg" min="30" max="200" step="0.5"> kg</div></div>
+      <div class="row"><div><b>Max. Puls</b><div class="muted s">optional – für Pulszonen (leer lassen, wenn unbekannt)</div></div><div><input type="number" id="sHr" min="120" max="230"> bpm</div></div>
+      <div class="row"><div class="muted s">Jedes Profil hat eigene FTP, Zonen, Tests und Verlauf.</div><div style="display:flex;gap:8px"><button id="btnProfAdd">+ Profil</button><button id="btnProfDel">Profil löschen</button></div></div>
+    </div>
+    <h2>Allgemein</h2>
+    <div class="card">
+      <div class="row"><div><b>Töne</b><div class="muted s">Piepser bei Intervallwechsel</div></div><input type="checkbox" id="sSound"></div>
+      <div class="row"><div><b>Auto-Pause</b><div class="muted s">Zeit stoppt, wenn du aufhörst zu treten</div></div><input type="checkbox" id="sAuto"></div>
+      <div class="row"><div><b>Demo-Modus</b><div class="muted s">Simuliert Trainer-Daten – zum Ausprobieren ohne Rolle</div></div><input type="checkbox" id="sDemo"></div>
+    </div>
+    <h2 id="zoneHead">Trainingszonen</h2>
+    <div class="card"><table class="z" id="zoneTbl"></table></div>
+    <div class="card" id="hrZoneCard"><table class="z" id="hrZoneTbl"></table></div>
+    <h2>Eigene Trainings</h2>
+    <div class="card"><p class="muted s" style="margin-top:0">Zwift-Workouts (.zwo, z.B. von whatsonzwift.com) importieren – die Leistung wird automatisch auf deine FTP skaliert.</p>
+      <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
+    <h2>Zwift Click – Diagnose</h2>
+    <div class="card"><p class="muted s" style="margin-top:0">Falls die Click-Tasten nicht reagieren: verbinden, Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
+    <h2>Daten</h2>
+    <div class="card"><button id="btnWipe">Alle Daten löschen</button></div>
+  </section>
+</main>
 
-<h1>🚴 Trainer Test — Van Rysel D100</h1>
-<div id="status">Nicht verbunden</div>
-<button id="connectBtn">Trainer verbinden</button>
-<div id="hrStatus" style="margin-top:-10px; margin-bottom: 15px; font-size:0.85em; color:#999;">Herzfrequenz: nicht verbunden</div>
-<button id="connectHrBtn" style="background:#a83258;">Herzfrequenz-Sensor verbinden (Watch)</button>
-
-<div class="data-grid">
-  <div class="data-card">
-    <div class="data-value" id="powerValue">--</div>
-    <div class="data-label">WATT</div>
+<div id="ride" class="ride hidden">
+  <div class="rtop"><div class="n" id="rName"></div><div class="muted s" id="rState"></div><button id="rEnd">Beenden</button></div>
+  <div class="metrics">
+    <div class="m pw"><label>Leistung (3 s)</label><span id="mPow">0</span><small id="mPowSub">W</small></div>
+    <div class="m tg"><label>Ziel</label><span id="mTgt">–</span><small id="mTgtSub"></small></div>
+    <div class="m"><label>Kadenz</label><span id="mCad">0</span><small>rpm</small></div>
+    <div class="m"><label>Puls</label><span id="mHr">–</span><small id="mHrSub">bpm</small></div>
+    <div class="m"><label>Zeit</label><span id="mEl">0:00</span><small id="mRem"></small></div>
+    <div class="m"><label>NP</label><span id="mNp">–</span><small id="mKj"></small></div>
   </div>
-  <div class="data-card">
-    <div class="data-value" id="cadenceValue">--</div>
-    <div class="data-label">KADENZ (rpm)</div>
+  <div class="interval">
+    <div style="flex:1;min-width:0"><div class="lbl" id="iLbl"></div><div class="bar"><i id="iBar"></i></div></div>
+    <div class="irem" id="iRem">0:00</div>
+    <div class="next" id="iNext"></div>
   </div>
-  <div class="data-card">
-    <div class="data-value" id="speedValue">--</div>
-    <div class="data-label">SPEED (km/h)</div>
+  <div class="chartwrap"><canvas id="chart"></canvas></div>
+  <div class="ctrl">
+    <div class="adj"><button id="cMinus">−</button><div id="cLbl"></div><button id="cPlus">+</button></div>
+    <button id="cPause">Pause</button>
+    <button id="cSkip">Überspringen</button>
   </div>
-  <div class="data-card">
-    <div class="data-value" id="heartRateValue">--</div>
-    <div class="data-label">HERZFREQUENZ</div>
-  </div>
+  <div id="startOv" class="startov hidden"></div>
 </div>
 
-<div id="log"></div>
+<div id="modal" class="modal hidden"></div>
+<div id="toast"></div>
 
 <script>
-// FTMS = Fitness Machine Service (Standard Bluetooth GATT Profil)
-const FTMS_SERVICE_UUID = 0x1826;
-const INDOOR_BIKE_DATA_CHAR_UUID = 0x2ad2;
+'use strict';
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${m}:${String(x).padStart(2,'0')}`; };
+const dateCH = d => new Date(d).toLocaleDateString('de-CH');
+const dateTimeCH = d => new Date(d).toLocaleString('de-CH', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; };
+const LS = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ toast('Speichern fehlgeschlagen'); return false; } }
+};
+let toastT;
+function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
 
-// Heart Rate Service (Standard)
-const HEART_RATE_SERVICE_UUID = 0x180d;
-const HEART_RATE_MEASUREMENT_CHAR_UUID = 0x2a37;
-
-const statusEl = document.getElementById('status');
-const logEl = document.getElementById('log');
-const connectBtn = document.getElementById('connectBtn');
-
-function log(msg) {
-  console.log(msg);
-  logEl.textContent = msg + '\n' + logEl.textContent;
+const settings = Object.assign({sound:true, autoPause:true}, LS.get('rr_settings', {}));
+/* Profile: jedes Profil hat eigene Körperdaten, FTP-Verlauf und Trainingsverlauf */
+let profiles = LS.get('rr_profiles', null);
+if (!profiles){
+  profiles = [{id:'p1', name:'Profil 1', ftp:settings.ftp || 200, weight:settings.weight || 75, hrMax:0, ftpLog:settings.ftpLog || []},
+              {id:'p2', name:'Profil 2', ftp:170, weight:60, hrMax:0, ftpLog:[]}];
+  const oldH = LS.get('rr_hist', null); if (oldH){ LS.set('rr_hist_p1', oldH); localStorage.removeItem('rr_hist'); }
+  LS.set('rr_profiles', profiles);
+}
+['ftp', 'weight', 'ftpLog'].forEach(k => delete settings[k]);
+let activeId = LS.get('rr_active', profiles[0].id);
+const prof = () => profiles.find(p => p.id === activeId) || profiles[0];
+['ftp', 'weight', 'ftpLog', 'hrMax'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
+const histKey = () => 'rr_hist_' + prof().id;
+const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
+function switchProfile(id){
+  if (ride && ride.running){ toast('Während eines Trainings kann das Profil nicht gewechselt werden'); return; }
+  activeId = id; saveSettings(); renderAll(); closeModal(); toast(`Profil: ${prof().name} · FTP ${prof().ftp} W`);
+}
+function addProfile(){
+  if (ride && ride.running) return;
+  const name = (prompt('Name des neuen Profils:', '') || '').trim(); if (!name) return;
+  const p = {id:'p' + Date.now(), name:name.slice(0, 20), ftp:170, weight:65, hrMax:0, ftpLog:[]};
+  profiles.push(p); switchProfile(p.id); switchTab('settings'); toast(`Profil ${p.name} angelegt – Gewicht eintragen und Rampentest fahren`);
+}
+function openProfiles(){
+  openModal(`<h3>Wer fährt?</h3><div class="plist">${profiles.map(p => `<button class="pbtn ${p.id === activeId ? 'act' : ''}" data-prof="${p.id}"><b>${esc(p.name)}</b>
+    <span>FTP ${p.ftp} W · ${p.weight} kg · ${(p.ftp/p.weight).toFixed(2)} W/kg</span></button>`).join('')}</div>
+    <div class="btns"><button id="mProfAdd">+ Profil hinzufügen</button><button class="primary" onclick="closeModal()">Schliessen</button></div>`);
+  $('#mProfAdd').onclick = addProfile;
 }
 
-function setStatus(text, className) {
-  statusEl.textContent = text;
-  statusEl.className = className || '';
+/* ---------- Zonen ---------- */
+const ZONES = [
+  {n:'Z1 Erholung', max:0.55, c:'#4b5262'},
+  {n:'Z2 Grundlage', max:0.75, c:'#3b82f6'},
+  {n:'Z3 Tempo', max:0.90, c:'#22c55e'},
+  {n:'Z4 Schwelle', max:1.05, c:'#facc15'},
+  {n:'Z5 VO2max', max:1.20, c:'#f97316'},
+  {n:'Z6 Anaerob', max:99, c:'#ef4444'}];
+const zoneOf = p => ZONES.find(z => p <= z.max + 1e-9) || ZONES[5];
+const HRZ = [['Z1 Erholung', .5, .6], ['Z2 Grundlage', .6, .7], ['Z3 Tempo', .7, .8], ['Z4 Schwelle', .8, .9], ['Z5 Maximal', .9, 1]];
+const hrZone = h => { const p = h/settings.hrMax; const z = HRZ.find(z => p < z[2]) || HRZ[4]; return p < .5 ? 'unter Z1' : z[0]; };
+
+/* ---------- Trainings ---------- */
+const CATS = [
+  {id:'test', name:'FTP-Tests', note:'Mach zuerst einen Test – danach sind alle Trainings auf deine Leistung abgestimmt. Alle 4–6 Wochen wiederholen.'},
+  {id:'vo2', name:'VO2max', note:'1–2× pro Woche, mit mind. 48 h Abstand. Zu leicht oder zu hart? Während der Fahrt mit +/− die Intensität anpassen.'},
+  {id:'thr', name:'Schwelle & Sweet Spot', note:''},
+  {id:'end', name:'Grundlage & Erholung', note:''},
+  {id:'custom', name:'Eigene (ZWO-Import)', note:''}];
+
+const BUILTIN = (() => {
+  const ss = (m, p, l, tag) => ({dur:Math.round(m*60), p0:p, p1:p, kind:'erg', label:l, tag});
+  const rp = (m, a, b, l) => ({dur:Math.round(m*60), p0:a, p1:b, kind:'erg', label:l});
+  const fr = (m, p, l, tag) => ({dur:Math.round(m*60), p0:p, p1:p, kind:'free', label:l, tag});
+  const reps = (n, fn) => Array.from({length:n}, (_, i) => fn(i+1, n)).flat();
+  const WU = (m=10) => rp(m, 0.5, 0.75, 'Einfahren'), CD = (m=8) => rp(m, 0.6, 0.4, 'Ausfahren');
+  const steps = reps(30, i => { const p = +(0.6 + (i-1)*0.06).toFixed(2); return [{dur:60, p0:p, p1:p, kind:'erg', label:`Stufe ${i}`, tag:'ramp'}]; });
+  return [
+    {id:'ramp', cat:'test', test:'ramp', name:'Rampentest', desc:'Jede Minute +6 % FTP bis zur Erschöpfung. Neue FTP = 75 % der besten Minute, dazu eine VO2max-Schätzung.',
+      segs:[rp(5, 0.4, 0.55, 'Einfahren'), ss(1, 0.55, 'Bereit machen'), ...steps]},
+    {id:'ftp20', cat:'test', test:'ftp20', name:'20-min-FTP-Test', desc:'Klassiker: 20 min so hart wie möglich, Watt selbst steuern. Neue FTP = 95 % des Durchschnitts.',
+      segs:[WU(10), ...reps(3, (i, n) => [ss(1, 1.05, `Aktivierung ${i}/${n}`), ss(1, 0.55, 'Locker')]), ss(4, 0.5, 'Locker'),
+        fr(5, 1.1, '5 min hart'), ss(10, 0.5, 'Erholen'), fr(20, 1.0, '20-min-Test – alles geben', 'test20'), CD(10)]},
+    {id:'vo2-5x3', cat:'vo2', name:'VO2max 5 × 3 min', desc:'5 × 3 min @ 118 % FTP, 3 min Pause. Der Klassiker für die maximale Sauerstoffaufnahme.',
+      segs:[WU(10), ss(2, 0.5, 'Locker'), ...reps(5, (i, n) => [ss(3, 1.18, `VO2 ${i}/${n}`), ss(3, 0.5, 'Pause')]), CD(7)]},
+    {id:'vo2-4x4', cat:'vo2', name:'Norwegisch 4 × 4 min', desc:'4 × 4 min @ 112 % FTP, 3 min aktive Pause. Viel Zeit nahe VO2max.',
+      segs:[WU(12), ...reps(4, (i, n) => [ss(4, 1.12, `4×4 – ${i}/${n}`), ss(3, 0.55, 'Pause')]), CD(10)]},
+    {id:'vo2-3015', cat:'vo2', name:'30/15 Rønnestad', desc:'3 Sätze à 13 × (30 s @ 125 % / 15 s locker). In Studien sehr wirksam für VO2max.',
+      segs:[WU(12), ss(3, 0.5, 'Locker'), ...reps(3, (s, ns) => [...reps(13, (i, n) => [ss(0.5, 1.25, `Satz ${s}/${ns} · ${i}/${n}`), ss(0.25, 0.55, '15 s locker')]), ss(3, 0.5, 'Satzpause')]), CD(8)]},
+    {id:'vo2-6x2', cat:'vo2', name:'VO2max 6 × 2 min', desc:'6 × 2 min @ 125 % FTP, 2 min Pause. Kurz und knackig.',
+      segs:[WU(10), ss(2, 0.5, 'Locker'), ...reps(6, (i, n) => [ss(2, 1.25, `VO2 ${i}/${n}`), ss(2, 0.5, 'Pause')]), CD(8)]},
+    {id:'ss-3x12', cat:'thr', name:'Sweet Spot 3 × 12 min', desc:'3 × 12 min @ 90 % FTP, 4 min Pause.',
+      segs:[WU(10), ...reps(3, (i, n) => [ss(12, 0.9, `Sweet Spot ${i}/${n}`), ss(4, 0.55, 'Pause')]), CD(6)]},
+    {id:'thr-2x20', cat:'thr', name:'Schwelle 2 × 20 min', desc:'2 × 20 min @ 95 % FTP, 5 min Pause.',
+      segs:[WU(10), ss(20, 0.95, 'Schwelle 1/2'), ss(5, 0.55, 'Pause'), ss(20, 0.95, 'Schwelle 2/2'), CD(8)]},
+    {id:'end-60', cat:'end', name:'Grundlage 60 min', desc:'Ruhige Ausdauer @ 68 % FTP.',
+      segs:[rp(5, 0.45, 0.65, 'Einfahren'), ss(50, 0.68, 'Grundlage'), rp(5, 0.6, 0.45, 'Ausfahren')]},
+    {id:'rec-30', cat:'end', name:'Erholung 30 min', desc:'Lockeres Fahren @ 50 % FTP.', segs:[ss(30, 0.5, 'Erholung')]},
+    {id:'free', cat:'end', openEnd:true, name:'Freie Fahrt', desc:'Kein Programm – Widerstand selbst wählen (Stufe 1–10, auch mit Zwift Click).',
+      segs:[{dur:4*3600, p0:0, p1:0, kind:'sim', label:'Freie Fahrt'}]},
+  ];
+})();
+const allWorkouts = () => [...BUILTIN, ...LS.get('rr_custom', [])];
+const totalOf = w => w.segs.reduce((a, s) => a + s.dur, 0);
+function durLabel(w){ if (w.test === 'ramp') return 'ca. 20 min'; if (w.openEnd) return 'offen'; return Math.round(totalOf(w)/60) + ' min'; }
+function tssEst(w){
+  if (w.openEnd) return '–'; if (w.test === 'ramp') return '~30';
+  let s4 = 0, tot = 0;
+  for (const g of w.segs){ const n = Math.max(1, Math.round(g.dur/5));
+    for (let i = 0; i < n; i++){ const p = g.p0 + (g.p1-g.p0)*(i+.5)/n; s4 += Math.pow(p, 4)*g.dur/n; } tot += g.dur; }
+  const np = Math.pow(s4/tot, 0.25); return Math.round(tot*np*np/36);
+}
+function profileSVG(w){
+  const W = 300, H = 54;
+  let segs = w.segs;
+  if (w.test === 'ramp') segs = segs.filter(s => s.tag !== 'ramp' || s.p0 <= 1.45);
+  if (w.openEnd) return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><rect x="0" y="${H-18}" width="${W}" height="18" fill="${hexA('#8a91a3',.35)}"/></svg>`;
+  const tot = segs.reduce((a, s) => a + s.dur, 0), mx = Math.max(1.3, ...segs.map(s => Math.max(s.p0, s.p1)));
+  let x = 0, out = '';
+  for (const s of segs){
+    const x0 = x/tot*W, x1 = (x+s.dur)/tot*W, y0 = H - s.p0/mx*H, y1 = H - s.p1/mx*H;
+    const c = s.kind === 'free' ? '#8a91a3' : zoneOf((s.p0+s.p1)/2).c;
+    out += `<polygon points="${x0.toFixed(1)},${H} ${x0.toFixed(1)},${y0.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${H}" fill="${c}"/>`;
+    x += s.dur;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${out}</svg>`;
 }
 
-// Parst die Indoor Bike Data Characteristic gemäss FTMS-Spezifikation
-function parseIndoorBikeData(dataView) {
-  let offset = 0;
-  const flags = dataView.getUint16(offset, true);
-  offset += 2;
+/* ---------- Live-Daten ---------- */
+const live = {power:0, cad:0, speed:0, hr:0, lastBike:0, lastHr:0};
+const pwBuf = [];
+const pw3 = () => pwBuf.length ? pwBuf.reduce((a, b) => a + b, 0)/pwBuf.length : 0;
+let demo = false;
 
-  const result = {};
+/* ---------- Bluetooth: Trainer (FTMS) ---------- */
+const trainer = {dev:null, cp:null, connected:false, ergNative:true, simSupported:true, maxPower:600, manual:false};
+const hrm = {dev:null, connected:false, manual:false};
+const click = {dev:null, connected:false, manual:false, prevPlus:false, prevMinus:false, log:[]};
+const bound = new WeakSet();
+function bindOnce(ch, fn){ if (bound.has(ch)) return; bound.add(ch); ch.addEventListener('characteristicvaluechanged', fn); }
+function setPill(id, state){ const b = $(id); b.classList.remove('on', 'busy'); if (state) b.classList.add(state); }
+async function gattWrite(ch, data){ return ch.writeValueWithResponse ? ch.writeValueWithResponse(data) : ch.writeValue(data); }
 
-  // Bit 0 = 0 bedeutet: Instantaneous Speed IST vorhanden
-  const moreDataFlag = flags & 0x0001;
-  if (!moreDataFlag) {
-    result.speed = dataView.getUint16(offset, true) / 100; // km/h
-    offset += 2;
-  }
-
-  // Bit 1: Average Speed present
-  if (flags & 0x0002) {
-    offset += 2; // wir ignorieren Average Speed, überspringen nur
-  }
-
-  // Bit 2: Instantaneous Cadence present
-  if (flags & 0x0004) {
-    result.cadence = dataView.getUint16(offset, true) / 2; // rpm (0.5 Auflösung)
-    offset += 2;
-  }
-
-  // Bit 3: Average Cadence present
-  if (flags & 0x0008) {
-    offset += 2;
-  }
-
-  // Bit 4: Total Distance present (3 bytes!)
-  if (flags & 0x0010) {
-    offset += 3;
-  }
-
-  // Bit 5: Resistance Level present
-  if (flags & 0x0020) {
-    offset += 2;
-  }
-
-  // Bit 6: Instantaneous Power present
-  if (flags & 0x0040) {
-    result.power = dataView.getInt16(offset, true); // Watt
-    offset += 2;
-  }
-
-  // weitere Felder (Average Power, Energy, HR, etc.) folgen danach,
-  // für den ersten Test brauchen wir die nicht.
-
-  return result;
+function btOk(){
+  if (navigator.bluetooth) return true;
+  openModal(`<h3>Bluetooth nicht verfügbar</h3><p>Dieser Browser kann nicht mit dem Trainer sprechen.</p>
+    <ul><li><b>PC / Android:</b> Chrome oder Edge verwenden</li><li><b>iPhone / iPad:</b> Gratis-App <b>Bluefy</b> verwenden (Safari kann kein Web-Bluetooth)</li>
+    <li>Die Seite muss über <b>https://</b> geöffnet sein (z.B. GitHub Pages)</li></ul>
+    <p class="muted s">Zum Ausprobieren ohne Trainer: Einstellungen → Demo-Modus.</p><div class="btns"><button onclick="closeModal()">OK</button></div>`);
+  return false;
 }
 
-function parseHeartRate(dataView) {
-  const flags = dataView.getUint8(0);
-  const is16bit = flags & 0x1;
-  const hr = is16bit ? dataView.getUint16(1, true) : dataView.getUint8(1);
-  return hr;
-}
-
-async function connectTrainer() {
+function parseBike(dv){
   try {
-    setStatus('Suche Trainer...', '');
-    log('Öffne Bluetooth-Geräteauswahl für FTMS...');
-
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [FTMS_SERVICE_UUID] }],
-      optionalServices: [HEART_RATE_SERVICE_UUID]
-    });
-
-    log('Gerät gewählt: ' + device.name);
-    setStatus('Verbinde mit ' + device.name + '...', '');
-
-    device.addEventListener('gattserverdisconnected', () => {
-      setStatus('Verbindung getrennt', 'error');
-    });
-
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(FTMS_SERVICE_UUID);
-    const characteristic = await service.getCharacteristic(INDOOR_BIKE_DATA_CHAR_UUID);
-
-    await characteristic.startNotifications();
-    characteristic.addEventListener('characteristicvaluechanged', (event) => {
-      const data = parseIndoorBikeData(event.target.value);
-      if (data.power !== undefined) {
-        document.getElementById('powerValue').textContent = data.power;
-      }
-      if (data.cadence !== undefined) {
-        document.getElementById('cadenceValue').textContent = data.cadence;
-      }
-      if (data.speed !== undefined) {
-        document.getElementById('speedValue').textContent = data.speed.toFixed(1);
-      }
-    });
-
-    setStatus('Verbunden mit ' + device.name, 'connected');
-    log('Live-Daten werden empfangen.');
-
-  } catch (error) {
-    console.error(error);
-    setStatus('Fehler: ' + error.message, 'error');
-    log('Fehler: ' + error.message);
-  }
+    let o = 0; const f = dv.getUint16(o, true); o += 2;
+    if (!(f & 1)){ live.speed = dv.getUint16(o, true)/100; o += 2; }
+    if (f & 2) o += 2;
+    if (f & 4){ live.cad = dv.getUint16(o, true)/2; o += 2; }
+    if (f & 8) o += 2;
+    if (f & 16) o += 3;
+    if (f & 32) o += 2;
+    if (f & 64){ live.power = Math.max(0, dv.getInt16(o, true)); o += 2; }
+    if (f & 128) o += 2;
+    if (f & 256) o += 5;
+    if (f & 512){ const h = dv.getUint8(o); if (h && !hrm.connected){ live.hr = h; live.lastHr = performance.now(); } o += 1; }
+  } catch(e){}
+  if (!demo) live.lastBike = performance.now();
 }
 
-async function connectHeartRate() {
-  const hrStatusEl = document.getElementById('hrStatus');
+let cpBusy = false, cpNext = null;
+const toBytes = a => a instanceof Uint8Array ? a : new Uint8Array(a);
+async function cpRaw(a){
+  if (!trainer.cp) return;
+  while (cpBusy) await sleep(30);
+  cpBusy = true;
+  try { await gattWrite(trainer.cp, toBytes(a)); } catch(e){ console.warn('CP', e); } finally { cpBusy = false; }
+  pump();
+}
+function cpSend(a){ if (!trainer.connected || demo) return; cpNext = toBytes(a); pump(); }
+async function pump(){
+  if (cpBusy || !cpNext || !trainer.cp) return;
+  const a = cpNext; cpNext = null; cpBusy = true;
+  try { await gattWrite(trainer.cp, a); } catch(e){ console.warn('CP', e); }
+  cpBusy = false; if (cpNext) pump();
+}
+const powerCmd = w => { w = Math.round(w); return [0x05, w & 255, (w >> 8) & 255]; };
+function simCmd(grade){ const b = new DataView(new ArrayBuffer(7)); b.setUint8(0, 0x11); b.setInt16(1, 0, true); b.setInt16(3, Math.round(grade*100), true); b.setUint8(5, 40); b.setUint8(6, 51); return new Uint8Array(b.buffer); }
+function onCpResp(e){
+  const v = e.target.value; if (v.byteLength < 3 || v.getUint8(0) !== 0x80) return;
+  const op = v.getUint8(1), res = v.getUint8(2);
+  if (res === 1) return;
+  if (res === 5){ cpRaw([0x00]).then(() => { if (ride){ ride.lastTargetSent = null; ride.lastGradeSent = null; } }); return; }
+  if (op === 0x05 && (res === 2 || res === 3) && trainer.ergNative && trainer.simSupported){
+    trainer.ergNative = false; if (ride) ride.lastGradeSent = null;
+    toast('Trainer nimmt keine Wattvorgabe an – App regelt jetzt über die Steigung');
+  }
+}
+async function setupTrainer(dev){
+  const server = await dev.gatt.connect();
+  const svc = await server.getPrimaryService(0x1826);
+  const data = await svc.getCharacteristic(0x2ad2);
+  bindOnce(data, e => parseBike(e.target.value));
+  await data.startNotifications();
+  try { const f = await (await svc.getCharacteristic(0x2acc)).readValue();
+    if (f.byteLength >= 8){ const t = f.getUint32(4, true); const erg = !!(t & 8), sim = !!(t & 8192);
+      if (erg || sim){ trainer.ergNative = erg; trainer.simSupported = sim; } } } catch(e){}
+  try { const r = await (await svc.getCharacteristic(0x2ad8)).readValue(); const mx = r.getInt16(2, true); if (mx > 50) trainer.maxPower = mx; } catch(e){}
+  trainer.cp = await svc.getCharacteristic(0x2ad9);
+  bindOnce(trainer.cp, onCpResp);
+  await trainer.cp.startNotifications();
+  trainer.connected = true;
+  await cpRaw([0x00]); await cpRaw([0x07]);
+  if (ride){ ride.lastTargetSent = null; ride.lastGradeSent = null; }
+}
+async function connectTrainer(){
+  if (!btOk()) return;
+  if (trainer.connected){ if (confirm('Trainer trennen?')){ trainer.manual = true; trainer.dev.gatt.disconnect(); } return; }
   try {
-    hrStatusEl.textContent = 'Herzfrequenz: Suche Sensor...';
-    log('Öffne Bluetooth-Geräteauswahl für Heart Rate...');
-
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [HEART_RATE_SERVICE_UUID] }]
-    });
-
-    log('HF-Gerät gewählt: ' + device.name);
-    hrStatusEl.textContent = 'Herzfrequenz: Verbinde mit ' + device.name + '...';
-
-    device.addEventListener('gattserverdisconnected', () => {
-      hrStatusEl.textContent = 'Herzfrequenz: Verbindung getrennt';
-    });
-
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(HEART_RATE_SERVICE_UUID);
-    const characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR_UUID);
-
-    await characteristic.startNotifications();
-    characteristic.addEventListener('characteristicvaluechanged', (event) => {
-      const hr = parseHeartRate(event.target.value);
-      document.getElementById('heartRateValue').textContent = hr;
-    });
-
-    hrStatusEl.textContent = 'Herzfrequenz: Verbunden mit ' + device.name;
-    log('HF-Live-Daten werden empfangen.');
-
-  } catch (error) {
-    console.error(error);
-    hrStatusEl.textContent = 'Herzfrequenz-Fehler: ' + error.message;
-    log('HF-Fehler: ' + error.message);
+    setPill('#pTrainer', 'busy');
+    const dev = await navigator.bluetooth.requestDevice({filters:[{services:[0x1826]}]});
+    trainer.dev = dev; trainer.manual = false;
+    if (!bound.has(dev)){ bound.add(dev); dev.addEventListener('gattserverdisconnected', onTrainerLost); }
+    await setupTrainer(dev);
+    setPill('#pTrainer', 'on');
+    toast(`${dev.name || 'Trainer'} verbunden · ${trainer.ergNative ? 'ERG' : 'ERG über App-Regelung'} · max. ${trainer.maxPower} W`);
+  } catch(e){
+    setPill('#pTrainer', trainer.connected ? 'on' : null);
+    if (e.name !== 'NotFoundError') toast('Verbindung fehlgeschlagen: ' + e.message);
   }
 }
-
-connectBtn.addEventListener('click', connectTrainer);
-document.getElementById('connectHrBtn').addEventListener('click', connectHeartRate);
-
-// Web Bluetooth Verfügbarkeit prüfen
-if (!navigator.bluetooth) {
-  setStatus('Web Bluetooth wird von diesem Browser nicht unterstützt. Bitte Chrome auf Android verwenden.', 'error');
-  connectBtn.disabled = true;
+async function onTrainerLost(){
+  trainer.connected = false; trainer.cp = null; cpBusy = false; cpNext = null; setPill('#pTrainer', null);
+  if (trainer.manual){ toast('Trainer getrennt'); return; }
+  setPill('#pTrainer', 'busy'); toast('Trainer-Verbindung verloren – verbinde neu …');
+  for (let i = 1; i <= 6; i++){
+    await sleep(1500*i); if (trainer.manual) return;
+    try { await setupTrainer(trainer.dev); setPill('#pTrainer', 'on'); toast('Trainer wieder verbunden'); return; } catch(e){}
+  }
+  setPill('#pTrainer', null); toast('Trainer nicht erreichbar – bitte neu verbinden');
 }
+
+/* ---------- Bluetooth: Pulsgurt ---------- */
+async function setupHr(dev){
+  const server = await dev.gatt.connect();
+  const ch = await (await server.getPrimaryService('heart_rate')).getCharacteristic('heart_rate_measurement');
+  bindOnce(ch, e => { const v = e.target.value; const f = v.getUint8(0); live.hr = (f & 1) ? v.getUint16(1, true) : v.getUint8(1); live.lastHr = performance.now(); });
+  await ch.startNotifications(); hrm.connected = true;
+}
+async function connectHr(){
+  if (!btOk()) return;
+  if (hrm.connected){ if (confirm('Pulsgurt trennen?')){ hrm.manual = true; hrm.dev.gatt.disconnect(); } return; }
+  try {
+    setPill('#pHr', 'busy');
+    const dev = await navigator.bluetooth.requestDevice({filters:[{services:['heart_rate']}]});
+    hrm.dev = dev; hrm.manual = false;
+    if (!bound.has(dev)){ bound.add(dev); dev.addEventListener('gattserverdisconnected', async () => {
+      hrm.connected = false; setPill('#pHr', null); if (hrm.manual) return;
+      for (let i = 1; i <= 4; i++){ await sleep(2000*i); try { await setupHr(dev); setPill('#pHr', 'on'); return; } catch(e){} } }); }
+    await setupHr(dev); setPill('#pHr', 'on'); toast(`${dev.name || 'Pulsgurt'} verbunden`);
+  } catch(e){ setPill('#pHr', hrm.connected ? 'on' : null); if (e.name !== 'NotFoundError') toast('Pulsgurt: ' + e.message); }
+}
+
+/* ---------- Bluetooth: Zwift Click (experimentell) ---------- */
+const CK = id => `0000000${id}-19ca-4651-86e5-fa29dcdd09d1`;
+async function setupClick(dev){
+  const server = await dev.gatt.connect();
+  const svc = await server.getPrimaryService(CK(1));
+  const as = await svc.getCharacteristic(CK(2)); bindOnce(as, e => onClickData(e.target.value, 'A')); await as.startNotifications();
+  try { const tx = await svc.getCharacteristic(CK(4)); bindOnce(tx, e => onClickData(e.target.value, 'S')); await tx.startNotifications(); } catch(e){}
+  const rx = await svc.getCharacteristic(CK(3));
+  await gattWrite(rx, new TextEncoder().encode('RideOn'));
+  click.connected = true;
+}
+async function connectClick(){
+  if (!btOk()) return;
+  if (click.connected){ if (confirm('Zwift Click trennen?')){ click.manual = true; click.dev.gatt.disconnect(); } return; }
+  try {
+    setPill('#pClick', 'busy');
+    const dev = await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Zwift'}], optionalServices:[CK(1)]});
+    click.dev = dev; click.manual = false;
+    if (!bound.has(dev)){ bound.add(dev); dev.addEventListener('gattserverdisconnected', async () => {
+      click.connected = false; setPill('#pClick', null); if (click.manual) return;
+      for (let i = 1; i <= 4; i++){ await sleep(2000*i); try { await setupClick(dev); setPill('#pClick', 'on'); return; } catch(e){} } }); }
+    await setupClick(dev); setPill('#pClick', 'on'); toast('Zwift Click verbunden – Tasten: +/−');
+  } catch(e){ setPill('#pClick', click.connected ? 'on' : null); if (e.name !== 'NotFoundError') toast('Click: ' + e.message); }
+}
+function pbFields(b){
+  const out = {}; let i = 0;
+  const vint = () => { let v = 0, sh = 0, x; do { x = b[i++]; v += (x & 0x7f)*2**sh; sh += 7; } while ((x & 0x80) && i < b.length); return v; };
+  while (i < b.length){ const key = vint(), fn = Math.floor(key/8), wt = key % 8;
+    if (wt === 0) out[fn] = vint(); else if (wt === 2){ const l = vint(); i += l; } else if (wt === 5) i += 4; else if (wt === 1) i += 8; else break; }
+  return out;
+}
+function onClickData(dv, src){
+  const b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+  click.log.unshift(src + ': ' + [...b].map(x => x.toString(16).padStart(2, '0')).join(' '));
+  if (click.log.length > 15) click.log.pop();
+  $('#clickLog').textContent = click.log.join('\n');
+  if (src !== 'A' || !b.length) return;
+  let plus = false, minus = false;
+  if (b[0] === 0x37){ const f = pbFields(b.subarray(1)); plus = f[1] === 0; minus = f[2] === 0; }          // Click v1
+  else if (b[0] === 0x23){ const f = pbFields(b.subarray(1)); if (f[1] === undefined) return;             // Click v2 / Ride
+    const pr = (~f[1]) >>> 0; plus = !!(pr & (0x2 | 0x200 | 0x2000)); minus = !!(pr & (0x8 | 0x400 | 0x4000)); }
+  else return;
+  if (plus && !click.prevPlus) adjust(+1);
+  if (minus && !click.prevMinus) adjust(-1);
+  click.prevPlus = plus; click.prevMinus = minus;
+}
+
+/* ---------- Ton & Bildschirm ---------- */
+let actx = null;
+function initAudio(){ try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch(e){} }
+function beep(freq = 880, dur = 0.12, vol = 0.15){
+  if (!settings.sound || !actx) return;
+  try { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = freq; g.gain.value = vol;
+    o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + dur); } catch(e){}
+}
+let wakeLock = null;
+async function keepAwake(on){
+  try { if (on && 'wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); }
+        else if (!on && wakeLock){ await wakeLock.release(); wakeLock = null; } } catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ride && ride.running && !ride.finished) keepAwake(true); });
+
+/* ---------- Fahrt ---------- */
+let ride = null;
+function prepare(w){ let t = 0; const segs = w.segs.map(s => { const o = {...s, start:t}; t += s.dur; return o; }); return {...w, segs, total:t}; }
+
+function openRide(w){
+  if (ride && ride.running) return;
+  const p = prepare(w), rs = p.segs.find(s => s.tag === 'ramp');
+  ride = {w:p, t:0, elapsed:0, running:false, paused:false, autoPaused:false, finished:false, bias:1, freeAdj:{}, level:3,
+    samples:[], segIdx:0, lastSeg:null, lastTargetSent:null, lastGradeSent:null, swGrade:1, idleMs:0, failS:0,
+    rampStart: rs ? rs.start : 0, rampDone:false, kj:0, roll:[], rollSum:0, np4:0, npN:0, maxP:0, startedAt:null};
+  $('#rName').textContent = `${w.name} · ${prof().name}`;
+  $('#cPause').textContent = 'Pause';
+  $('#ride').classList.remove('hidden');
+  showStartOverlay(); renderRide();
+}
+function showStartOverlay(){
+  const w = ride.w, ov = $('#startOv'), conn = trainer.connected || demo;
+  const tips = {
+    ramp:'Kadenz 85–95 rpm halten, solange du die Stufe schaffst. Der Test endet automatisch, wenn die Leistung einbricht – oder mit «Test beenden». Danach 5 min ausfahren.',
+    ftp20:'In den grauen Abschnitten steuerst du die Watt selbst mit +/− (Zwift Click oder Pfeiltasten). Im 20-min-Teil gleichmässig das Maximum fahren – lieber vorsichtig starten und am Schluss zulegen.'};
+  ov.innerHTML = `<div style="font-size:24px;font-weight:800">${esc(w.name)}</div>
+    <div class="muted" style="max-width:540px">${esc(w.desc || '')}</div>
+    <div class="muted s">Fahrer: <b style="color:var(--acc)">${esc(prof().name)}</b> · ${durLabel(w)} · FTP ${settings.ftp} W${w.test || w.openEnd ? '' : ' · Intensität während der Fahrt mit +/− anpassbar'}</div>
+    ${tips[w.test] ? `<div class="banner" style="max-width:540px;text-align:left">${tips[w.test]}</div>` : ''}
+    ${conn ? '' : `<div class="banner" style="max-width:540px">Trainer nicht verbunden. <button id="ovConn" style="margin-left:8px">Trainer verbinden</button></div>`}
+    <div style="display:flex;gap:10px"><button id="ovBack">Zurück</button><button class="primary" id="ovGo" style="padding:14px 34px;font-size:18px">Start</button></div>`;
+  ov.classList.remove('hidden');
+  $('#ovBack').onclick = () => { $('#ride').classList.add('hidden'); ride = null; };
+  $('#ovGo').onclick = startRide;
+  const oc = $('#ovConn'); if (oc) oc.onclick = async () => { await connectTrainer(); if (ride && !ride.running) showStartOverlay(); };
+}
+async function startRide(){
+  initAudio();
+  const ov = $('#startOv'), r = ride;
+  for (let i = 3; i > 0; i--){
+    if (ride !== r) return;
+    ov.innerHTML = `<div class="cd">${i}</div><div class="muted">Gleich geht's los: ${esc(r.w.segs[0].label)}</div>`;
+    beep(660, 0.1, 0.15); await sleep(1000);
+  }
+  if (ride !== r) return;
+  ov.classList.add('hidden'); beep(990, 0.3, 0.2);
+  r.running = true; r.startedAt = Date.now(); keepAwake(true);
+  if (trainer.connected && !demo){ await cpRaw([0x00]); await cpRaw([0x07]); }
+  r.lastTargetSent = null; applyResistance();
+}
+function curSeg(){ const r = ride, s = r.w.segs; let i = r.segIdx; while (i < s.length-1 && r.t >= s[i].start + s[i].dur) i++; r.segIdx = i; return s[i]; }
+function targetAt(seg, t){
+  if (!seg || seg.kind === 'sim') return null;
+  const f = seg.dur ? clamp((t - seg.start)/seg.dur, 0, 1) : 0, pct = seg.p0 + (seg.p1 - seg.p0)*f;
+  const w = seg.kind === 'free' ? Math.round(pct*settings.ftp) + (ride.freeAdj[seg.start] || 0)
+                                : Math.round(pct*settings.ftp*(seg.tag === 'ramp' ? 1 : ride.bias));
+  return clamp(w, 0, trainer.maxPower || 600);
+}
+function segWatt(s, pct){ return s.kind === 'free' ? pct*settings.ftp + (ride.freeAdj[s.start] || 0) : pct*settings.ftp*(s.tag === 'ramp' ? 1 : ride.bias); }
+const levelGrade = l => Math.round((l-1)*(6/9)*10)/10;
+
+function applyResistance(){
+  const r = ride; if (!r || !r.running || r.paused || r.finished || !trainer.connected || demo) return;
+  const seg = curSeg();
+  if (seg.kind === 'sim'){ const g = levelGrade(r.level); if (g !== r.lastGradeSent){ cpSend(simCmd(g)); r.lastGradeSent = g; r.lastTargetSent = null; } return; }
+  const tgt = targetAt(seg, r.t);
+  if (trainer.ergNative){ if (tgt !== r.lastTargetSent){ cpSend(powerCmd(tgt)); r.lastTargetSent = tgt; r.lastGradeSent = null; } }
+  else {  // Software-ERG: Steigung so nachregeln, dass die Zielleistung erreicht wird
+    r.swGrade = clamp(r.swGrade + (tgt - pw3())*0.005, 0, 6);
+    const g = Math.round(r.swGrade*10)/10; if (g !== r.lastGradeSent){ cpSend(simCmd(g)); r.lastGradeSent = g; }
+  }
+}
+function adjust(dir){
+  const r = ride; if (!r || !r.running || r.finished) return;
+  const seg = curSeg(); if (seg.tag === 'ramp') return;
+  if (seg.kind === 'sim') r.level = clamp(r.level + dir, 1, 10);
+  else if (seg.kind === 'free') r.freeAdj[seg.start] = (r.freeAdj[seg.start] || 0) + dir*5;
+  else r.bias = clamp(Math.round((r.bias + dir*0.05)*100)/100, 0.5, 1.5);
+  beep(dir > 0 ? 1100 : 700, 0.05, 0.08);
+  applyResistance(); renderRide();
+}
+function togglePause(){ const r = ride; if (!r || !r.running || r.finished) return; r.paused = !r.paused; r.autoPaused = false; r.idleMs = 0; pauseChanged(); }
+function pauseChanged(){
+  const r = ride; $('#cPause').textContent = r.paused ? 'Weiter' : 'Pause';
+  if (r.paused){ if (trainer.connected) cpSend(simCmd(0)); r.lastTargetSent = null; r.lastGradeSent = null; }
+  else applyResistance();
+}
+function skip(){
+  const r = ride; if (!r || !r.running || r.finished) return;
+  const seg = curSeg();
+  if (seg.tag === 'ramp'){ endRamp(false); return; }
+  if (r.w.openEnd) return;
+  r.t = seg.start + seg.dur + 0.01; r.lastTargetSent = null; curSeg(); applyResistance();
+}
+function endRamp(auto){
+  const r = ride, s = r.w.segs, i = r.segIdx, cur = s[i];
+  cur.dur = Math.max(1, Math.round(r.t - cur.start));
+  const cd = {dur:300, p0:0.45, p1:0.35, kind:'erg', label:'Ausfahren', tag:'cd', start:cur.start + cur.dur};
+  s.splice(i+1, s.length, cd);
+  r.w.total = cd.start + cd.dur; r.rampDone = true; r.t = Math.max(r.t, cd.start);
+  beep(440, 0.5, 0.2);
+  toast(auto ? 'Test beendet – Leistung nicht mehr gehalten. Jetzt 5 min ausfahren.' : 'Test beendet – jetzt 5 min ausfahren.');
+  r.lastTargetSent = null; applyResistance();
+}
+function everySecond(){
+  const r = ride, seg = curSeg();
+  if (r.segIdx !== r.lastSeg){ if (r.lastSeg !== null){ beep(990, 0.25, 0.18); toast(seg.label); } r.lastSeg = r.segIdx; r.failS = 0; r.lastTargetSent = null; }
+  const tgt = targetAt(seg, r.t);
+  const p = Math.round(live.power), c = Math.round(live.cad), h = Math.round(live.hr) || 0, v = live.speed;
+  r.samples.push({pos:r.t, p, c, h, v, tag:seg.tag || ''});
+  r.kj += p/1000; r.maxP = Math.max(r.maxP, p);
+  r.roll.push(p); r.rollSum += p; if (r.roll.length > 30) r.rollSum -= r.roll.shift();
+  if (r.roll.length === 30){ r.np4 += Math.pow(r.rollSum/30, 4); r.npN++; }
+  if (seg.dur >= 10 && !r.w.openEnd){ const rem = Math.ceil(seg.start + seg.dur - r.t); if (rem >= 1 && rem <= 3) beep(660, 0.08, 0.12); }
+  if (seg.tag === 'ramp' && tgt && r.t - r.rampStart > 120){
+    if (c < 45 || p < 0.5*tgt) r.failS++; else r.failS = 0;
+    if (r.failS >= 5){ endRamp(true); return; }
+  }
+  applyResistance();
+}
+function demoStep(now){
+  let tgt = 140; const r = ride;
+  if (r && r.running && !r.paused){ const t = targetAt(curSeg(), r.t); tgt = t != null ? t : 90 + r.level*20; }
+  const failing = tgt > settings.ftp*1.33;
+  live.cad = failing ? Math.max(0, live.cad - 5) : 86 + Math.sin(now/4000)*4 + (Math.random() - .5)*3;
+  live.power = Math.max(0, live.power + ((failing ? tgt*0.3 : tgt) - live.power)*0.25 + (Math.random() - .5)*10);
+  live.speed = live.cad*0.38;
+  const hrGoal = 70 + 110*Math.min(1.3, live.power/settings.ftp)/1.3;
+  live.hr = live.hr ? live.hr + (hrGoal - live.hr)*0.02 : 70;
+  live.lastBike = live.lastHr = now;
+}
+let lastTick = performance.now();
+function tick(){
+  const now = performance.now(), dt = (now - lastTick)/1000; lastTick = now;
+  if (demo) demoStep(now);
+  else if (now - live.lastBike > 3000){ live.power = 0; live.cad = 0; live.speed = 0; }
+  if (now - live.lastHr > 5000) live.hr = 0;
+  pwBuf.push(live.power); if (pwBuf.length > 12) pwBuf.shift();
+  const r = ride;
+  if (r && r.running && !r.finished){
+    const seg = curSeg(), idle = live.cad < 1 && live.power < 1;
+    if (r.paused){ if (r.autoPaused && !idle){ r.paused = false; r.autoPaused = false; r.idleMs = 0; pauseChanged(); } }
+    else if (settings.autoPause && seg.tag !== 'ramp' && idle){ r.idleMs += dt*1000; if (r.idleMs > 3000){ r.paused = true; r.autoPaused = true; pauseChanged(); } }
+    else r.idleMs = 0;
+    if (!r.paused){
+      r.t += dt; r.elapsed += dt;
+      while (ride === r && !r.finished && r.samples.length < Math.floor(r.elapsed)) everySecond();
+      if (ride === r && !r.finished && !r.w.openEnd && r.t >= r.w.total) finishRide();
+    }
+  }
+  if (ride) renderRide(); else renderLiveStrip();
+}
+
+/* ---------- Anzeige während der Fahrt ---------- */
+function renderRide(){
+  const r = ride; if (!r) return;
+  const seg = curSeg(), ftp = settings.ftp, tgt = targetAt(seg, r.t), pw = Math.round(pw3());
+  const pe = $('#mPow'); pe.textContent = pw;
+  $('#mPowSub').textContent = `W · ${(pw/settings.weight).toFixed(1)} W/kg`;
+  if (tgt != null && r.running && !r.paused){ const tol = Math.max(8, tgt*0.06); pe.style.color = Math.abs(pw - tgt) <= tol ? 'var(--ok)' : (pw < tgt ? 'var(--warn)' : ''); } else pe.style.color = '';
+  $('#mTgt').textContent = tgt == null ? r.level : tgt;
+  $('#mTgtSub').textContent = tgt == null ? `Stufe von 10 (${levelGrade(r.level)} %)` : `${Math.round(tgt/ftp*100)} % FTP · ${zoneOf(tgt/ftp).n}`;
+  $('#mCad').textContent = Math.round(live.cad);
+  $('#mHr').textContent = live.hr ? Math.round(live.hr) : '–';
+  $('#mHrSub').textContent = live.hr && settings.hrMax ? `bpm · ${Math.round(live.hr/settings.hrMax*100)} % · ${hrZone(live.hr)}` : 'bpm';
+  $('#mEl').textContent = fmt(r.elapsed);
+  const open = r.w.openEnd || (r.w.test === 'ramp' && !r.rampDone);
+  $('#mRem').textContent = open ? 'Fahrzeit' : `noch ${fmt(r.w.total - r.t)}`;
+  $('#mNp').textContent = r.npN ? Math.round(Math.pow(r.np4/r.npN, 0.25)) : '–';
+  $('#mKj').textContent = `${Math.round(r.kj)} kJ`;
+  $('#iLbl').textContent = seg.label + (seg.kind === 'free' ? ' · Watt selbst steuern' : '');
+  const inSeg = r.t - seg.start;
+  $('#iRem').textContent = r.w.openEnd ? fmt(inSeg) : fmt(seg.start + seg.dur - r.t);
+  const bar = $('#iBar'); bar.style.width = r.w.openEnd ? '0%' : clamp(inSeg/seg.dur*100, 0, 100) + '%';
+  bar.style.background = tgt != null ? zoneOf(tgt/ftp).c : 'var(--acc)';
+  const nx = r.w.segs[r.segIdx + 1];
+  $('#iNext').innerHTML = nx ? `Danach<br><b>${esc(nx.label)}</b><br>${fmt(nx.dur)} · ${nx.kind === 'free' ? 'frei' : Math.round(segWatt(nx, nx.p0)) + ' W'}` : '';
+  let lbl, dis = false;
+  if (seg.tag === 'ramp'){ lbl = 'Rampentest'; dis = true; }
+  else if (seg.kind === 'sim') lbl = `Stufe ${r.level}/10`;
+  else if (seg.kind === 'free') lbl = `Ziel ${tgt} W (±5)`;
+  else lbl = `Intensität ${Math.round(r.bias*100)} %`;
+  $('#cLbl').textContent = lbl; $('#cMinus').disabled = $('#cPlus').disabled = dis || !r.running;
+  const sk = $('#cSkip'); sk.textContent = seg.tag === 'ramp' ? 'Test beenden' : 'Überspringen'; sk.disabled = !r.running || r.w.openEnd;
+  $('#cPause').disabled = !r.running;
+  $('#rState').textContent = !r.running ? '' : r.paused ? (r.autoPaused ? 'Auto-Pause – lostreten' : 'Pausiert')
+    : demo ? 'Demo' : trainer.connected ? (seg.kind === 'sim' ? 'SIM' : trainer.ergNative ? 'ERG' : 'ERG (App)') : 'kein Trainer';
+  drawChart();
+}
+function drawChart(){
+  const r = ride, cv = $('#chart'), wrap = cv.parentElement, dpr = window.devicePixelRatio || 1, W = wrap.clientWidth, H = wrap.clientHeight;
+  if (!W || !H) return;
+  if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const ftp = settings.ftp, segs = r.w.segs, S = r.samples;
+  let x0 = 0, x1 = r.w.total;
+  if (r.w.test === 'ramp' && !r.rampDone) x1 = Math.min(r.w.total, Math.max(r.t + 240, r.rampStart + 14*60));
+  if (r.w.openEnd){ x1 = Math.max(1200, r.t + 60); x0 = Math.max(0, x1 - 3600); }
+  let maxY = Math.max(ftp*1.4, r.maxP*1.08);
+  for (const s of segs){ if (s.start > x1) break; if (s.kind !== 'sim') maxY = Math.max(maxY, segWatt(s, Math.max(s.p0, s.p1))*1.12); }
+  const X = t => (t - x0)/(x1 - x0)*W, Y = p => H - 2 - p/maxY*(H - 16);
+  segs.forEach((s, i) => {
+    if (s.start > x1 || s.start + s.dur < x0 || s.kind === 'sim') return;
+    const fEnd = Math.min(1, (x1 - s.start)/s.dur), a = X(s.start), b = X(s.start + s.dur*fEnd);
+    const col = s.kind === 'free' ? '#8a91a3' : zoneOf((s.p0 + s.p1)/2).c;
+    g.fillStyle = hexA(col, i === r.segIdx ? 0.75 : 0.38);
+    g.beginPath(); g.moveTo(a, H); g.lineTo(a, Y(segWatt(s, s.p0))); g.lineTo(b, Y(segWatt(s, s.p0 + (s.p1 - s.p0)*fEnd))); g.lineTo(b, H); g.closePath(); g.fill();
+  });
+  g.strokeStyle = 'rgba(255,255,255,.28)'; g.setLineDash([4, 4]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, Y(ftp)); g.lineTo(W, Y(ftp)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '11px sans-serif'; g.fillText('FTP ' + ftp + ' W', 6, Y(ftp) - 4);
+  const line = (val, color, w) => {
+    g.strokeStyle = color; g.lineWidth = w; g.beginPath(); let st = false, prev = -9;
+    for (const s of S){ const v = val(s); if (s.pos < x0 || v == null){ st = false; continue; }
+      const x = X(s.pos), y = v; if (!st || s.pos - prev > 3){ g.moveTo(x, y); st = true; } else g.lineTo(x, y); prev = s.pos; }
+    g.stroke();
+  };
+  if (S.some(s => s.h)) line(s => s.h ? H - 2 - (s.h - 40)/170*(H - 16) : null, 'rgba(239,68,68,.7)', 1);
+  g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 3; line(s => Y(s.p), '#ffffff', 2); g.shadowBlur = 0;
+  const cx = X(r.t); g.strokeStyle = '#ff6a1a'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, H); g.stroke();
+}
+
+/* ---------- Auswertung ---------- */
+function bestAvg(a, win){ if (a.length < win) return null; let s = 0, best = 0;
+  for (let i = 0; i < a.length; i++){ s += a[i]; if (i >= win) s -= a[i - win]; if (i >= win - 1) best = Math.max(best, s/win); } return Math.round(best); }
+function summarize(r){
+  const S = r.samples, p = S.map(s => s.p), n = p.length, ftp = settings.ftp;
+  const avg = n ? p.reduce((a, b) => a + b, 0)/n : 0;
+  const np = r.npN ? Math.pow(r.np4/r.npN, 0.25) : avg;
+  const ifv = np/ftp, cads = S.map(s => s.c).filter(c => c > 0), hrs = S.map(s => s.h).filter(h => h > 0);
+  let test = null;
+  if (r.w.test === 'ramp'){ const map = bestAvg(p, 60);
+    if (map) test = {label:'Rampentest', ftp:Math.round(map*0.75), map, vo2:(10.8*map/settings.weight + 7).toFixed(1)}; }
+  if (r.w.test === 'ftp20'){ const tp = S.filter(s => s.tag === 'test20').map(s => s.p);
+    if (tp.length >= 600){ const a = tp.reduce((x, y) => x + y, 0)/tp.length;
+      test = {label:'20-min-Test', ftp:Math.round(a*0.95), note: tp.length < 1140 ? 'Testteil unvollständig – Wert nur bedingt aussagekräftig.' : `Ø 20 min: ${Math.round(a)} W × 0.95`}; } }
+  return {dur:n, avg:Math.round(avg), np:Math.round(np), ifv:+ifv.toFixed(2), tss:Math.round(n*np*ifv/(ftp*36)), kj:Math.round(r.kj),
+    maxP:r.maxP, b1:bestAvg(p, 60), b5:bestAvg(p, 300), b20:bestAvg(p, 1200),
+    avgCad: cads.length ? Math.round(cads.reduce((a, b) => a + b, 0)/cads.length) : 0,
+    avgHr: hrs.length ? Math.round(hrs.reduce((a, b) => a + b, 0)/hrs.length) : 0, maxHr: hrs.length ? Math.max(...hrs) : 0,
+    dist: S.reduce((a, s) => a + s.v/3.6, 0)/1000, test};
+}
+function finishRide(){
+  const r = ride; if (!r || r.finished) return;
+  r.finished = true; r.running = false; keepAwake(false);
+  if (trainer.connected) cpSend(simCmd(0));
+  const sum = summarize(r); let entry = null;
+  if (r.samples.length >= 60){
+    const S = r.samples;
+    entry = {...sum, id:'h' + Date.now(), date:r.startedAt, name:r.w.name, ftpAt:settings.ftp, rider:prof().name,
+      s:{p:S.map(x => x.p), c:S.map(x => x.c), h:S.map(x => x.h), v:S.map(x => Math.round(x.v*10)/10)}};
+    saveHistory(entry);
+  }
+  $('#ride').classList.add('hidden'); ride = null;
+  showSummary(entry || {...sum, name:r.w.name}, !!sum.test);
+  renderHistory();
+}
+function saveHistory(e){
+  const h = LS.get(histKey(), []); h.unshift(e); while (h.length > 40) h.pop();
+  for (let i = 0; i < 40; i++){
+    try { localStorage.setItem(histKey(), JSON.stringify(h)); return; }
+    catch(err){ const old = [...h].reverse().find(x => x.s); if (old) delete old.s; else return; }
+  }
+}
+function showSummary(x, fresh){
+  const t = x.test;
+  const testHtml = t ? `<div class="result"><div class="muted s">${esc(t.label)} – Ergebnis</div>
+      <div class="big">${t.ftp} <small>W FTP</small></div>
+      <div class="muted s">${(t.ftp/settings.weight).toFixed(2)} W/kg${t.map ? ` · Beste Minute (MAP) ${t.map} W<br>VO2max geschätzt ≈ ${t.vo2} ml/kg/min (grobe Schätzung)` : ''}${t.note ? '<br>' + esc(t.note) : ''}</div>
+      ${fresh ? `<button class="primary" id="adopt" style="margin-top:10px">Als neue FTP übernehmen (bisher ${settings.ftp} W)</button>` : ''}</div>` : '';
+  const st = [['Dauer', fmt(x.dur)], ['Ø Leistung', x.avg + ' W'], ['NP', x.np + ' W'], ['IF', Number(x.ifv).toFixed(2)], ['TSS', x.tss], ['Arbeit', x.kj + ' kJ'],
+    ['Max', x.maxP + ' W'], ['Beste 1 min', x.b1 ? x.b1 + ' W' : '–'], ['Beste 5 min', x.b5 ? x.b5 + ' W' : '–'],
+    ['Ø Kadenz', x.avgCad ? x.avgCad + ' rpm' : '–'], ['Ø Puls', x.avgHr ? x.avgHr + ' bpm' : '–'], ['Distanz', x.dist.toFixed(1) + ' km']];
+  openModal(`<h3>${esc(x.name)}</h3><div class="muted s">${x.date ? dateTimeCH(x.date) : 'zu kurz – nicht gespeichert'}</div>${testHtml}
+    <div class="stats">${st.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+    <div class="btns">${x.s ? '<button id="sumTcx">TCX exportieren (Strava/Garmin)</button>' : ''}<button class="primary" id="sumClose">Schliessen</button></div>`);
+  $('#sumClose').onclick = closeModal;
+  if (x.s) $('#sumTcx').onclick = () => exportTcx(x);
+  const ad = $('#adopt'); if (ad) ad.onclick = () => { adoptFtp(t.ftp, t.label); ad.disabled = true; ad.textContent = 'Übernommen ✓'; };
+}
+function adoptFtp(v, type){
+  settings.ftp = v; settings.ftpLog = settings.ftpLog || []; settings.ftpLog.push({date:Date.now(), ftp:v, type});
+  saveSettings(); renderAll(); toast(`FTP = ${v} W – alle Trainings sind jetzt darauf abgestimmt`);
+}
+function exportTcx(x){
+  if (typeof x === 'string') x = LS.get(histKey(), []).find(e => e.id === x);
+  if (!x || !x.s) return;
+  const iso = d => new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z'), s = x.s;
+  let dist = 0, tp = '';
+  for (let i = 0; i < s.p.length; i++){
+    const v = (s.v[i] || 0)/3.6; dist += v;
+    tp += `<Trackpoint><Time>${iso(x.date + i*1000)}</Time><DistanceMeters>${dist.toFixed(1)}</DistanceMeters>` +
+      (s.h[i] ? `<HeartRateBpm><Value>${s.h[i]}</Value></HeartRateBpm>` : '') +
+      `<Cadence>${Math.min(254, s.c[i] | 0)}</Cadence><Extensions><ns3:TPX><ns3:Speed>${v.toFixed(2)}</ns3:Speed><ns3:Watts>${s.p[i] | 0}</ns3:Watts></ns3:TPX></Extensions></Trackpoint>\n`;
+  }
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2">
+<Activities><Activity Sport="Biking"><Id>${iso(x.date)}</Id>
+<Lap StartTime="${iso(x.date)}"><TotalTimeSeconds>${s.p.length}</TotalTimeSeconds><DistanceMeters>${dist.toFixed(1)}</DistanceMeters><Calories>${x.kj}</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod>
+<Track>
+${tp}</Track></Lap><Notes>${esc(x.name)}</Notes></Activity></Activities></TrainingCenterDatabase>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([xml], {type:'application/vnd.garmin.tcx+xml'}));
+  a.download = `rolle_${new Date(x.date).toISOString().slice(0, 10)}_${x.name.replace(/[^\w\-]+/g, '_')}.tcx`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+/* ---------- ZWO-Import ---------- */
+function parseZWO(txt, fname){
+  const doc = new DOMParser().parseFromString(txt, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('keine gültige XML-Datei');
+  const wk = [...doc.getElementsByTagName('*')].find(e => e.tagName.toLowerCase() === 'workout');
+  if (!wk) throw new Error('kein <workout>-Block');
+  const num = (el, a, d) => { const v = parseFloat(el.getAttribute(a)); return isNaN(v) ? d : v; };
+  const segs = [];
+  for (const el of wk.children){
+    const tag = el.tagName.toLowerCase(), dur = Math.round(num(el, 'Duration', 0));
+    const lo = num(el, 'PowerLow', num(el, 'Power', 0.5)), hi = num(el, 'PowerHigh', lo);
+    if (['warmup', 'cooldown', 'ramp'].includes(tag)) segs.push({dur, p0:lo, p1:hi, kind:'erg', label: tag === 'warmup' ? 'Einfahren' : tag === 'cooldown' ? 'Ausfahren' : 'Rampe'});
+    else if (tag === 'steadystate'){ const p = el.hasAttribute('Power') ? num(el, 'Power', 0.6) : (lo + hi)/2; segs.push({dur, p0:p, p1:p, kind:'erg', label:`${Math.round(p*100)} % FTP`}); }
+    else if (tag === 'intervalst'){
+      const n = Math.max(1, num(el, 'Repeat', 1) | 0), on = Math.round(num(el, 'OnDuration', 60)), off = Math.round(num(el, 'OffDuration', 60));
+      const onP = el.hasAttribute('OnPower') ? num(el, 'OnPower', 1) : (num(el, 'PowerOnLow', 1) + num(el, 'PowerOnHigh', 1))/2;
+      const offP = el.hasAttribute('OffPower') ? num(el, 'OffPower', 0.5) : (num(el, 'PowerOffLow', 0.5) + num(el, 'PowerOffHigh', 0.5))/2;
+      for (let i = 1; i <= n; i++){ segs.push({dur:on, p0:onP, p1:onP, kind:'erg', label:`Intervall ${i}/${n}`}); if (off) segs.push({dur:off, p0:offP, p1:offP, kind:'erg', label:'Pause'}); }
+    }
+    else if (tag === 'freeride' || tag === 'maxeffort'){ const p = tag === 'maxeffort' ? 1.2 : 0.6; segs.push({dur, p0:p, p1:p, kind:'free', label: tag === 'maxeffort' ? 'Maximal' : 'Frei'}); }
+  }
+  const ok = segs.filter(s => s.dur > 0);
+  if (!ok.length) throw new Error('keine Intervalle gefunden');
+  const nm = doc.querySelector('name'), ds = doc.querySelector('description');
+  return {id:'c_' + Date.now() + Math.random().toString(36).slice(2, 6), cat:'custom', custom:true,
+    name:(nm && nm.textContent.trim()) || fname.replace(/\.(zwo|xml)$/i, ''),
+    desc:((ds && ds.textContent.trim()) || 'Importiertes Workout').slice(0, 160), segs:ok};
+}
+
+/* ---------- Seiten ---------- */
+function openModal(html){ const m = $('#modal'); m.innerHTML = `<div class="box">${html}</div>`; m.classList.remove('hidden'); }
+function closeModal(){ $('#modal').classList.add('hidden'); }
+function switchTab(id){
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('act', b.dataset.tab === id));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('act', s.id === 'tab-' + id));
+}
+function renderWorkouts(){
+  $('#btBanner').innerHTML = navigator.bluetooth ? '' : `<div class="banner">Dieser Browser hat kein Web-Bluetooth. PC/Android: Chrome oder Edge · iPhone: App «Bluefy». Zum Ausprobieren: Einstellungen → Demo-Modus.</div>`;
+  const last = (settings.ftpLog || []).slice(-1)[0];
+  $('#ftpCard').innerHTML = `<div><div class="muted s">FTP von <b style="color:var(--acc)">${esc(prof().name)}</b> <a href="#" id="ftpSwitch" style="color:var(--muted)">wechseln</a></div><div class="big">${settings.ftp} <small>W</small></div>
+    <div class="muted s">${(settings.ftp/settings.weight).toFixed(2)} W/kg · ${last ? `${esc(last.type)} vom ${dateCH(last.date)}` : 'noch kein Test – Schätzwert'}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primary" data-start="ramp">Rampentest starten</button><button data-start="free">Freie Fahrt</button></div>`;
+  const all = allWorkouts();
+  $('#wkList').innerHTML = CATS.map(c => {
+    const ws = all.filter(w => w.cat === c.id); if (!ws.length) return '';
+    return `<h2>${c.name}</h2>${c.note ? `<div class="note">${c.note}</div>` : ''}<div class="grid">${ws.map(w => `
+      <div class="card wk" data-start="${w.id}"><div class="t">${esc(w.name)}</div><div class="d">${esc(w.desc)}</div>${profileSVG(w)}
+      <div class="meta"><span>⏱ ${durLabel(w)}</span><span>TSS ${tssEst(w)}</span>${w.custom ? `<span class="del" data-del="${w.id}">Löschen</span>` : ''}</div></div>`).join('')}</div>`;
+  }).join('');
+}
+function renderHistory(){
+  const h = LS.get(histKey(), []), fl = settings.ftpLog || [];
+  const ftpHtml = fl.length ? `<div class="card"><div class="muted s">FTP-Verlauf</div><div class="ftpl">${fl.slice(-8).map(x => `<span><b>${x.ftp} W</b><small>${dateCH(x.date)}</small></span>`).join('')}</div></div>` : '';
+  $('#histList').innerHTML = ftpHtml + (h.length ? h.map(e => `<div class="card hitem">
+      <div class="hmain" data-hview="${e.id}"><div class="t">${esc(e.name)}</div>
+      <div class="muted s">${dateTimeCH(e.date)} · ${fmt(e.dur)} · Ø ${e.avg} W · NP ${e.np} W · TSS ${e.tss}${e.test ? ` · <b style="color:var(--acc)">FTP ${e.test.ftp} W</b>` : ''}</div></div>
+      ${e.s ? `<button data-tcx="${e.id}">TCX</button>` : ''}<button data-hdel="${e.id}" title="Löschen">✕</button></div>`).join('')
+    : '<div class="card muted">Noch keine Trainings gespeichert.</div>');
+}
+function renderSettings(){
+  $('#sName').value = prof().name; $('#sFtp').value = settings.ftp; $('#sKg').value = settings.weight; $('#sHr').value = settings.hrMax || '';
+  $('#btnProfDel').disabled = profiles.length < 2;
+  $('#zoneHead').textContent = `Trainingszonen – ${prof().name}`;
+  $('#hrZoneCard').classList.toggle('hidden', !settings.hrMax);
+  if (settings.hrMax) $('#hrZoneTbl').innerHTML = HRZ.map(z => `<tr><td>♥ ${z[0]}</td><td class="muted">${z[1]*100}–${z[2]*100} % HFmax</td><td style="text-align:right"><b>${Math.round(z[1]*settings.hrMax)}–${Math.round(z[2]*settings.hrMax)} bpm</b></td></tr>`).join('');
+  $('#sSound').checked = settings.sound; $('#sAuto').checked = settings.autoPause; $('#sDemo').checked = demo;
+  const f = settings.ftp;
+  $('#zoneTbl').innerHTML = ZONES.map((z, i) => {
+    const loP = i ? Math.round(ZONES[i-1].max*100) + 1 : 0, hiP = Math.round(z.max*100);
+    const loW = i ? Math.round(ZONES[i-1].max*f) + 1 : 0, hiW = Math.round(z.max*f);
+    return `<tr><td><span class="sw" style="background:${z.c}"></span>${z.n}</td><td class="muted">${i < 5 ? `${loP}–${hiP} %` : `> ${loP - 1} %`}</td><td style="text-align:right"><b>${i < 5 ? `${loW}–${hiW}` : `> ${loW - 1}`} W</b></td></tr>`;
+  }).join('');
+}
+function renderLiveStrip(){
+  const el = $('#liveStrip'), on = trainer.connected || demo || hrm.connected;
+  el.classList.toggle('hidden', !on);
+  if (on) el.innerHTML = `<b>${Math.round(pw3())}</b> W · <b>${Math.round(live.cad)}</b> rpm · <b>${live.hr ? Math.round(live.hr) : '–'}</b> bpm` +
+    (demo ? ' · <span style="color:var(--warn)">Demo</span>' : '') + (trainer.connected && !demo ? ` · ${trainer.ergNative ? 'ERG bereit' : 'ERG über App'}` : '');
+}
+function renderAll(){ $('#pProfile span').textContent = prof().name; renderWorkouts(); renderHistory(); renderSettings(); }
+
+/* ---------- Events ---------- */
+$('#pProfile').onclick = openProfiles;
+$('#pTrainer').onclick = connectTrainer;
+$('#pHr').onclick = connectHr;
+$('#pClick').onclick = connectClick;
+$('#cPlus').onclick = () => adjust(+1);
+$('#cMinus').onclick = () => adjust(-1);
+$('#cPause').onclick = togglePause;
+$('#cSkip').onclick = skip;
+$('#rEnd').onclick = () => {
+  if (!ride) return;
+  if (!ride.running){ $('#ride').classList.add('hidden'); ride = null; return; }
+  if (confirm('Training beenden und speichern?')) finishRide();
+};
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('click', e => {
+  const d = e.target.closest('[data-del]');
+  if (d){ e.stopPropagation(); if (confirm('Training löschen?')){ LS.set('rr_custom', LS.get('rr_custom', []).filter(w => w.id !== d.dataset.del)); renderWorkouts(); } return; }
+  const st = e.target.closest('[data-start]'); if (st){ const w = allWorkouts().find(x => x.id === st.dataset.start); if (w) openRide(w); return; }
+  const tc = e.target.closest('[data-tcx]'); if (tc){ exportTcx(tc.dataset.tcx); return; }
+  const hd = e.target.closest('[data-hdel]');
+  if (hd){ if (confirm('Eintrag löschen?')){ LS.set(histKey(), LS.get(histKey(), []).filter(x => x.id !== hd.dataset.hdel)); renderHistory(); } return; }
+  const hv = e.target.closest('[data-hview]'); if (hv){ const x = LS.get(histKey(), []).find(y => y.id === hv.dataset.hview); if (x) showSummary(x, false); return; }
+  const pf = e.target.closest('[data-prof]'); if (pf){ switchProfile(pf.dataset.prof); return; }
+  if (e.target.id === 'ftpSwitch'){ e.preventDefault(); openProfiles(); return; }
+  const tb = e.target.closest('[data-tab]'); if (tb) switchTab(tb.dataset.tab);
+});
+document.addEventListener('keydown', e => {
+  if (!ride || !ride.running || e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowUp' || e.key === '+'){ adjust(1); e.preventDefault(); }
+  else if (e.key === 'ArrowDown' || e.key === '-'){ adjust(-1); e.preventDefault(); }
+  else if (e.key === ' '){ togglePause(); e.preventDefault(); }
+});
+$('#sFtp').onchange = e => { const v = parseInt(e.target.value, 10); if (v >= 50 && v <= 600){ settings.ftp = v; saveSettings(); renderAll(); } else e.target.value = settings.ftp; };
+$('#sKg').onchange = e => { const v = parseFloat(e.target.value); if (v >= 30 && v <= 200){ settings.weight = v; saveSettings(); renderAll(); } else e.target.value = settings.weight; };
+$('#sName').onchange = e => { const v = e.target.value.trim(); if (v){ prof().name = v.slice(0, 20); saveSettings(); renderAll(); } else e.target.value = prof().name; };
+$('#sHr').onchange = e => { const v = parseInt(e.target.value, 10); settings.hrMax = (v >= 120 && v <= 230) ? v : 0; if (!settings.hrMax) e.target.value = ''; saveSettings(); renderSettings(); };
+$('#btnProfAdd').onclick = addProfile;
+$('#btnProfDel').onclick = () => {
+  if (profiles.length < 2 || (ride && ride.running)) return;
+  if (!confirm(`Profil «${prof().name}» mit allen Tests und dem Verlauf löschen?`)) return;
+  localStorage.removeItem(histKey()); profiles = profiles.filter(p => p.id !== activeId); switchProfile(profiles[0].id);
+};
+$('#sSound').onchange = e => { settings.sound = e.target.checked; saveSettings(); };
+$('#sAuto').onchange = e => { settings.autoPause = e.target.checked; saveSettings(); };
+$('#sDemo').onchange = e => { demo = e.target.checked; if (!demo){ live.power = live.cad = live.speed = live.hr = 0; } renderLiveStrip(); toast(demo ? 'Demo-Modus an – simulierte Daten' : 'Demo-Modus aus'); };
+$('#zwoFile').onchange = async e => {
+  const c = LS.get('rr_custom', []); let n = 0;
+  for (const f of e.target.files){ try { c.push(parseZWO(await f.text(), f.name)); n++; } catch(err){ toast(`${f.name}: ${err.message}`); } }
+  if (n){ LS.set('rr_custom', c); renderWorkouts(); toast(`${n} Training(s) importiert`); switchTab('workouts'); }
+  e.target.value = '';
+};
+$('#btnWipe').onclick = () => {
+  if (!confirm('Alle Einstellungen, Trainings und den Verlauf löschen?')) return;
+  Object.keys(localStorage).filter(k => k.startsWith('rr_')).forEach(k => localStorage.removeItem(k)); location.reload();
+};
+window.addEventListener('beforeunload', e => { if (ride && ride.running){ e.preventDefault(); e.returnValue = ''; } });
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+renderAll();
+setInterval(tick, 250);
 </script>
-
 </body>
 </html>
