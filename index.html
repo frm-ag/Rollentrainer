@@ -133,7 +133,9 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
       <div class="row"><div><b>Name</b></div><input type="text" id="sName" maxlength="20"></div>
       <div class="row"><div><b>FTP</b><div class="muted s">Basis aller Trainings (wird nach einem Test übernommen)</div></div><div><input type="number" id="sFtp" min="50" max="600"> W</div></div>
       <div class="row"><div><b>Gewicht</b><div class="muted s">für W/kg und VO2max-Schätzung</div></div><div><input type="number" id="sKg" min="30" max="200" step="0.5"> kg</div></div>
-      <div class="row"><div><b>Max. Puls</b><div class="muted s">optional – für Pulszonen (leer lassen, wenn unbekannt)</div></div><div><input type="number" id="sHr" min="120" max="230"> bpm</div></div>
+      <div class="row"><div><b>Alter</b><div class="muted s">schätzt den Max-Puls, falls du ihn nicht kennst</div></div><div><input type="number" id="sAge" min="10" max="99"> J.</div></div>
+      <div class="row"><div><b>Max. Puls</b><div class="muted s">optional – gemessener Wert ist genauer als die Schätzung</div></div><div><input type="number" id="sHr" min="120" max="230"> bpm</div></div>
+      <div class="row"><div><b>Ruhepuls</b><div class="muted s">optional – morgens im Liegen gemessen, macht die Zonen genauer</div></div><div><input type="number" id="sRest" min="30" max="100"> bpm</div></div>
       <div class="row"><div class="muted s">Jedes Profil hat eigene FTP, Zonen, Tests und Verlauf.</div><div style="display:flex;gap:8px"><button id="btnProfAdd">+ Profil</button><button id="btnProfDel">Profil löschen</button></div></div>
     </div>
     <h2>Allgemein</h2>
@@ -144,7 +146,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
     </div>
     <h2 id="zoneHead">Trainingszonen</h2>
     <div class="card"><table class="z" id="zoneTbl"></table></div>
-    <div class="card" id="hrZoneCard"><table class="z" id="hrZoneTbl"></table></div>
+    <div class="card" id="hrZoneCard"><div id="z2Box" style="margin-bottom:10px"></div><table class="z" id="hrZoneTbl"></table></div>
     <h2>Eigene Trainings</h2>
     <div class="card"><p class="muted s" style="margin-top:0">Zwift-Workouts (.zwo, z.B. von whatsonzwift.com) importieren – die Leistung wird automatisch auf deine FTP skaliert.</p>
       <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
@@ -213,7 +215,7 @@ if (!profiles){
 ['ftp', 'weight', 'ftpLog'].forEach(k => delete settings[k]);
 let activeId = LS.get('rr_active', profiles[0].id);
 const prof = () => profiles.find(p => p.id === activeId) || profiles[0];
-['ftp', 'weight', 'ftpLog', 'hrMax'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
+['ftp', 'weight', 'ftpLog', 'hrMax', 'age', 'hrRest'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
 const histKey = () => 'rr_hist_' + prof().id;
 const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
 function switchProfile(id){
@@ -243,7 +245,13 @@ const ZONES = [
   {n:'Z6 Anaerob', max:99, c:'#ef4444'}];
 const zoneOf = p => ZONES.find(z => p <= z.max + 1e-9) || ZONES[5];
 const HRZ = [['Z1 Erholung', .5, .6], ['Z2 Grundlage', .6, .7], ['Z3 Tempo', .7, .8], ['Z4 Schwelle', .8, .9], ['Z5 Maximal', .9, 1]];
-const hrZone = h => { const p = h/settings.hrMax; const z = HRZ.find(z => p < z[2]) || HRZ[4]; return p < .5 ? 'unter Z1' : z[0]; };
+/* Max-Puls: gemessen, sonst Schätzung nach Tanaka (208 − 0.7 × Alter) */
+const hrMaxEff = () => settings.hrMax || (settings.age ? Math.round(208 - 0.7*settings.age) : 0);
+/* Zonen-Grenze in bpm: mit Ruhepuls nach Karvonen (Herzfrequenzreserve), sonst % vom Max-Puls */
+const hrAt = pct => { const mx = hrMaxEff(), r = settings.hrRest; return Math.round(r && r < mx ? r + pct*(mx - r) : pct*mx); };
+const hrMethod = () => (settings.hrMax ? `Max-Puls ${settings.hrMax} (gemessen)` : `Max-Puls ≈ ${hrMaxEff()} (geschätzt aus Alter ${settings.age})`)
+  + (settings.hrRest ? ` · Ruhepuls ${settings.hrRest} → Karvonen-Methode` : ' · % vom Max-Puls');
+const hrZone = h => { if (h < hrAt(.5)) return 'unter Z1'; const z = HRZ.find(z => h < hrAt(z[2])) || HRZ[4]; return z[0]; };
 
 /* ---------- Trainings ---------- */
 const CATS = [
@@ -666,7 +674,7 @@ function renderRide(){
   $('#mTgtSub').textContent = tgt == null ? `Stufe von 10 (${levelGrade(r.level)} %)` : `${Math.round(tgt/ftp*100)} % FTP · ${zoneOf(tgt/ftp).n}`;
   $('#mCad').textContent = Math.round(live.cad);
   $('#mHr').textContent = live.hr ? Math.round(live.hr) : '–';
-  $('#mHrSub').textContent = live.hr && settings.hrMax ? `bpm · ${Math.round(live.hr/settings.hrMax*100)} % · ${hrZone(live.hr)}` : 'bpm';
+  $('#mHrSub').textContent = live.hr && hrMaxEff() ? `bpm · ${hrZone(live.hr)}` : 'bpm';
   $('#mEl').textContent = fmt(r.elapsed);
   const open = r.w.openEnd || (r.w.test === 'ramp' && !r.rampDone);
   $('#mRem').textContent = open ? 'Fahrzeit' : `noch ${fmt(r.w.total - r.t)}`;
@@ -849,7 +857,7 @@ function renderWorkouts(){
   $('#btBanner').innerHTML = navigator.bluetooth ? '' : `<div class="banner">Dieser Browser hat kein Web-Bluetooth. PC/Android: Chrome oder Edge · iPhone: App «Bluefy». Zum Ausprobieren: Einstellungen → Demo-Modus.</div>`;
   const last = (settings.ftpLog || []).slice(-1)[0];
   $('#ftpCard').innerHTML = `<div><div class="muted s">FTP von <b style="color:var(--acc)">${esc(prof().name)}</b> <a href="#" id="ftpSwitch" style="color:var(--muted)">wechseln</a></div><div class="big">${settings.ftp} <small>W</small></div>
-    <div class="muted s">${(settings.ftp/settings.weight).toFixed(2)} W/kg · ${last ? `${esc(last.type)} vom ${dateCH(last.date)}` : 'noch kein Test – Schätzwert'}</div></div>
+    <div class="muted s">${(settings.ftp/settings.weight).toFixed(2)} W/kg · ${last ? `${esc(last.type)} vom ${dateCH(last.date)}` : 'noch kein Test – Schätzwert'}</div>${hrMaxEff() ? `<div class="s" style="margin-top:4px">Zone 2: <b style="color:#3b82f6">${Math.round(0.56*settings.ftp)}–${Math.round(0.75*settings.ftp)} W</b> · <b style="color:#3b82f6">${hrAt(.6)}–${hrAt(.7)} bpm</b></div>` : ''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primary" data-start="ramp">Rampentest starten</button><button data-start="free">Freie Fahrt</button></div>`;
   const all = allWorkouts();
   $('#wkList').innerHTML = CATS.map(c => {
@@ -869,11 +877,17 @@ function renderHistory(){
     : '<div class="card muted">Noch keine Trainings gespeichert.</div>');
 }
 function renderSettings(){
-  $('#sName').value = prof().name; $('#sFtp').value = settings.ftp; $('#sKg').value = settings.weight; $('#sHr').value = settings.hrMax || '';
+  $('#sName').value = prof().name; $('#sFtp').value = settings.ftp; $('#sKg').value = settings.weight; $('#sHr').value = settings.hrMax || ''; $('#sAge').value = settings.age || ''; $('#sRest').value = settings.hrRest || '';
+  $('#sHr').placeholder = settings.age ? '≈ ' + Math.round(208 - 0.7*settings.age) : '';
   $('#btnProfDel').disabled = profiles.length < 2;
   $('#zoneHead').textContent = `Trainingszonen – ${prof().name}`;
-  $('#hrZoneCard').classList.toggle('hidden', !settings.hrMax);
-  if (settings.hrMax) $('#hrZoneTbl').innerHTML = HRZ.map(z => `<tr><td>♥ ${z[0]}</td><td class="muted">${z[1]*100}–${z[2]*100} % HFmax</td><td style="text-align:right"><b>${Math.round(z[1]*settings.hrMax)}–${Math.round(z[2]*settings.hrMax)} bpm</b></td></tr>`).join('');
+  const hm = hrMaxEff();
+  $('#hrZoneCard').classList.toggle('hidden', !hm);
+  if (hm){
+    $('#z2Box').innerHTML = `<div class="muted s">Pulszone 2 (Grundlage) – ${esc(prof().name)}</div>
+      <div class="big" style="color:#3b82f6">${hrAt(.6)}–${hrAt(.7)} <small>bpm</small></div><div class="muted s">${hrMethod()}</div>`;
+    $('#hrZoneTbl').innerHTML = HRZ.map(z => `<tr><td>♥ ${z[0]}</td><td class="muted">${z[1]*100}–${z[2]*100} %</td><td style="text-align:right"><b>${hrAt(z[1])}–${hrAt(z[2])} bpm</b></td></tr>`).join('');
+  }
   $('#sSound').checked = settings.sound; $('#sAuto').checked = settings.autoPause; $('#sDemo').checked = demo;
   const f = settings.ftp;
   $('#zoneTbl').innerHTML = ZONES.map((z, i) => {
@@ -926,7 +940,9 @@ document.addEventListener('keydown', e => {
 $('#sFtp').onchange = e => { const v = parseInt(e.target.value, 10); if (v >= 50 && v <= 600){ settings.ftp = v; saveSettings(); renderAll(); } else e.target.value = settings.ftp; };
 $('#sKg').onchange = e => { const v = parseFloat(e.target.value); if (v >= 30 && v <= 200){ settings.weight = v; saveSettings(); renderAll(); } else e.target.value = settings.weight; };
 $('#sName').onchange = e => { const v = e.target.value.trim(); if (v){ prof().name = v.slice(0, 20); saveSettings(); renderAll(); } else e.target.value = prof().name; };
-$('#sHr').onchange = e => { const v = parseInt(e.target.value, 10); settings.hrMax = (v >= 120 && v <= 230) ? v : 0; if (!settings.hrMax) e.target.value = ''; saveSettings(); renderSettings(); };
+const numIn = (id, key, lo, hi) => $(id).onchange = e => { const v = parseInt(e.target.value, 10); settings[key] = (v >= lo && v <= hi) ? v : 0; if (!settings[key]) e.target.value = ''; saveSettings(); renderAll(); };
+numIn('#sAge', 'age', 10, 99); numIn('#sRest', 'hrRest', 30, 100);
+$('#sHr').onchange = e => { const v = parseInt(e.target.value, 10); settings.hrMax = (v >= 120 && v <= 230) ? v : 0; if (!settings.hrMax) e.target.value = ''; saveSettings(); renderAll(); };
 $('#btnProfAdd').onclick = addProfile;
 $('#btnProfDel').onclick = () => {
   if (profiles.length < 2 || (ride && ride.running)) return;
