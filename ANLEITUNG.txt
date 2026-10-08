@@ -1,0 +1,46 @@
+ROLLE – Indoor-Training für den Van Rysel D100
+==============================================
+
+1) ONLINE STELLEN (dein Repo frm-ag/Rollentrainer)
+   - Repo öffnen → "Add file" → "Upload files"
+   - ALLE Dateien aus diesem ZIP-Ordner hineinziehen (nicht den Ordner selbst,
+     index.html muss direkt im Hauptverzeichnis liegen) → "Commit changes"
+     Die alte index.html wird dabei automatisch ersetzt.
+   - Settings → Pages → Source "Deploy from a branch", Branch "main", Ordner "/ (root)" → Save
+   - Nach 1–2 min: https://frm-ag.github.io/Rollentrainer/
+   - Auf dem Handy/Tablet: Menü → "Zum Startbildschirm hinzufügen"
+
+2) GERÄTE / BROWSER
+   - PC/Laptop, Android-Handy/Tablet: Chrome oder Edge
+   - iPhone/iPad: Safari kann kein Bluetooth → Gratis-App "Bluefy" nehmen
+   - Zwift-App und andere Trainings-Apps vorher schliessen (der Trainer kann nur mit einer App verbunden sein)
+   - Trainer NICHT in den Bluetooth-Einstellungen des Geräts koppeln
+
+3) ERSTES TRAINING
+   - Oben auf den Profil-Knopf → Profil wählen (z.B. du / deine Freundin)
+   - Einstellungen: Name, Gewicht, Alter (evtl. Max- und Ruhepuls) eintragen – pro Profil
+     → die App berechnet daraus die Pulszone 2
+   - "Trainer" oben antippen → D100 auswählen (optional: Puls, Click)
+   - Rampentest fahren → Ergebnis "Als neue FTP übernehmen"
+   - Ab jetzt sind alle Trainings auf die FTP dieses Profils abgestimmt
+   - Jedes Profil hat eigene FTP, Zonen, Tests und Trainingsverlauf
+
+4) WÄHREND DER FAHRT
+   - +/− : Intensität (ERG), Watt (freie Abschnitte) oder Stufe (Freie Fahrt)
+   - Gleiches mit Zwift Click oder Pfeiltasten; Leertaste = Pause
+   - Nach dem Training: TCX exportieren → bei Strava/Garmin Connect hochladen
+
+Ohne Trainer ausprobieren: Einstellungen → Demo-Modus.
+
+5) ROUTEN MIT KARTE (wie Rouvy)
+   - Trainings → "GPX importieren"
+   - GPX-Dateien bekommst du z.B. von:
+     · Strava: eigene Aktivität öffnen → "..." → "GPX exportieren"
+     · Komoot: Tour öffnen → "Herunterladen" / GPX
+     · gpx.studio: Route auf der Karte klicken → Exportieren (gratis, ohne Konto)
+   - Route antippen → fahren. Die Steigung geht an den Trainer (D100: max. 6 %),
+     die Geschwindigkeit wird aus Watt + Gewicht berechnet.
+   - +/− (oder Zwift Click) = virtuelle Gänge
+   - Steigungs-Stärke unter Einstellungen (50/75/100 %)
+   - "Karte auch bei Intervall-Trainings": Route im Hintergrund bei ERG-Trainings
+   - TCX-Export enthält die GPS-Spur → Strava zeigt die Strecke auf der Karte
