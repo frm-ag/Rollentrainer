@@ -44,5 +44,7 @@ Ohne Trainer ausprobieren: Einstellungen → Demo-Modus.
    - Steigungs-Stärke unter Einstellungen (50/75/100 %)
    - "Karte auch bei Intervall-Trainings": Route im Hintergrund bei ERG-Trainings
    - TCX-Export enthält die GPS-Spur → Strava zeigt die Strecke auf der Karte
-   - Knopf "2D/3D" oben links in der Karte: 3D-Flug über echtes Gelände
+   - Auswahl oben links: "Comic-Welt" (Figur fährt durch eine 3D-Welt aus deiner Route),
+     "3D-Karte" (Flug über echtes Luftbild-Gelände) oder "2D-Karte"
+   - 3D-Karte:
      (Kamera fährt hinter dir her). Karte ziehen = frei umschauen, "Folgen" = zurück

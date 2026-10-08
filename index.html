@@ -10,6 +10,7 @@
 <title>Rolle – Indoor-Training</title>
 <link rel="stylesheet" href="maplibre-gl.css">
 <script src="maplibre-gl.js" defer></script>
+<script src="world.js" defer></script>
 <style>
 :root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--line:#2a2f3a;--text:#e8eaf0;--muted:#8a91a3;--acc:#ff6a1a;--ok:#22c55e;--warn:#facc15;--bad:#ef4444}
 *{box-sizing:border-box}
@@ -118,7 +119,9 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
 .rmain{flex:1;display:flex;gap:8px;min-height:240px}
 .rmain .chartwrap{flex:1}
 .mapwrap{flex:1.4;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
-#map{flex:1;min-height:160px;background:#20242c}
+.mapview{flex:1;position:relative;min-height:170px}
+#map,#world{position:absolute;inset:0;width:100%;height:100%;background:#20242c}
+#world{display:block;touch-action:none}
 #elev{display:block;width:100%;height:78px;border-top:1px solid var(--line)}
 .rmain.routeonly .chartwrap{display:none}
 @media (max-width:700px){.rmain{flex-direction:column}.rmain .chartwrap{min-height:140px}}
@@ -186,7 +189,7 @@ select{background:var(--card2);color:var(--text);border:1px solid var(--line);bo
       <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
     <h2>Zwift Click – Diagnose</h2>
     <div class="card"><p class="muted s" style="margin-top:0">Click v2: Mit Fremd-Apps funktioniert die <b>rechte</b> Einheit (Taste + = mehr, B = weniger). Die linke ist von Zwift gesperrt. Reagiert nichts: Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
-    <h2>Daten</h2><div class="muted s" style="margin:-4px 0 8px">App-Version 10</div>
+    <h2>Daten</h2><div class="muted s" style="margin:-4px 0 8px">App-Version 11</div>
     <div class="card"><button id="btnWipe">Alle Daten löschen</button></div>
   </section>
 </main>
@@ -206,7 +209,7 @@ select{background:var(--card2);color:var(--text);border:1px solid var(--line);bo
     <div class="irem" id="iRem">0:00</div>
     <div class="next" id="iNext"></div>
   </div>
-  <div class="rmain" id="rmain"><div class="mapwrap hidden" id="mapWrap"><div id="map"></div><div class="mapctl"><button id="m3d">2D</button><select id="mBase"></select><button id="mFollow" class="hidden">◎ Folgen</button></div><canvas id="elev"></canvas></div><div class="chartwrap"><canvas id="chart"></canvas></div></div>
+  <div class="rmain" id="rmain"><div class="mapwrap hidden" id="mapWrap"><div class="mapview"><div id="map"></div><canvas id="world" class="hidden"></canvas><div class="mapctl"><select id="mView"><option value="world">Comic-Welt</option><option value="map3d">3D-Karte</option><option value="map2d">2D-Karte</option></select><select id="mBase"></select><button id="mFollow" class="hidden">◎ Folgen</button></div></div><canvas id="elev"></canvas></div><div class="chartwrap"><canvas id="chart"></canvas></div></div>
   <div class="ctrl">
     <div class="adj"><button id="cMinus">−</button><div id="cLbl"></div><button id="cPlus">+</button></div>
     <button id="cPause">Pause</button>
@@ -237,7 +240,7 @@ const LS = {
 let toastT;
 function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
 
-const settings = Object.assign({sound:true, autoPause:true, difficulty:1, mapRoute:''}, LS.get('rr_settings', {}));
+const settings = Object.assign({sound:true, autoPause:true, difficulty:1, mapRoute:'', mapView:'world'}, LS.get('rr_settings', {}));
 /* Profile: jedes Profil hat eigene Körperdaten, FTP-Verlauf und Trainingsverlauf */
 let profiles = LS.get('rr_profiles', null);
 if (!profiles){
@@ -251,7 +254,7 @@ let activeId = LS.get('rr_active', profiles[0].id);
 const prof = () => profiles.find(p => p.id === activeId) || profiles[0];
 ['ftp', 'weight', 'ftpLog', 'hrMax', 'age', 'hrRest'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
 const histKey = () => 'rr_hist_' + prof().id;
-const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause, difficulty:settings.difficulty, mapRoute:settings.mapRoute, map3d:settings.map3d, mapBase:settings.mapBase}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
+const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause, difficulty:settings.difficulty, mapRoute:settings.mapRoute, map3d:settings.map3d, mapBase:settings.mapBase, mapView:settings.mapView}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
 function switchProfile(id){
   if (ride && ride.running){ toast('Während eines Trainings kann das Profil nicht gewechselt werden'); return; }
   activeId = id; saveSettings(); renderAll(); closeModal(); toast(`Profil: ${prof().name} · FTP ${prof().ftp} W`);
@@ -404,7 +407,7 @@ const BASES = {
   chmap:{name:'Landeskarte CH', tiles:['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'], max:18, attr:'© swisstopo'},
   world:{name:'Luftbild Welt', tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], max:18, attr:'Tiles © Esri'},
   osm:{name:'OpenStreetMap', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max:19, attr:'© OpenStreetMap'}};
-let mlMap = null, mlMarker = null, mlRaf = 0, mlBearing = null, mlFollow = true, mlLastDone = 0, mlLastFrame = 0, mlBase = '';
+let mlRouteId = '', mlMap = null, mlMarker = null, mlRaf = 0, mlBearing = null, mlFollow = true, mlLastDone = 0, mlLastFrame = 0, mlBase = '';
 const lineGeo = c => ({type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c.length > 1 ? c : [c[0] || [0, 0], c[0] || [0, 0]]}});
 function mlStyle(rt, key){
   const b = BASES[key];
@@ -429,7 +432,7 @@ function setupMap(rt){
   if (!window.maplibregl){ el.innerHTML = '<div class="mapmsg">Karte konnte nicht geladen werden (offline?)</div>'; return false; }
   mlBase = (settings.mapBase && BASES[settings.mapBase] && !(settings.mapBase.startsWith('ch') && !inCH(rt))) ? settings.mapBase : (inCH(rt) ? 'chimg' : 'world');
   $('#mBase').innerHTML = Object.entries(BASES).map(([k, b]) => `<option value="${k}" ${k === mlBase ? 'selected' : ''}>${b.name}</option>`).join('');
-  $('#m3d').textContent = settings.map3d === false ? '3D' : '2D';
+  mlRouteId = rt.id;
   mlFollow = true; $('#mFollow').classList.add('hidden'); mlBearing = null;
   const p0 = rt.pts[0];
   try {
@@ -449,7 +452,7 @@ const brng = (a, b) => { const r = Math.PI/180, y = Math.sin((b.lon - a.lon)*r)*
   x = Math.cos(a.lat*r)*Math.sin(b.lat*r) - Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon - a.lon)*r); return Math.atan2(y, x)/r; };
 function mlFrame(now){
   const r = ride;
-  if (!r || !r.route || !mlMap){ mlRaf = 0; return; }
+  if (!r || !r.route || !mlMap || settings.mapView === 'world'){ mlRaf = 0; return; }
   mlRaf = requestAnimationFrame(mlFrame);
   if (now - mlLastFrame < 33) return;              // max. ~30 Bilder/s (Akku)
   const dt = Math.min(0.2, (now - (mlLastFrame || now))/1000); mlLastFrame = now;
@@ -469,7 +472,26 @@ function mlFrame(now){
     if (src){ const c = []; for (const q of rt.pts){ if (q[3] > d) break; c.push([q[1], q[0]]); } c.push([p.lon, p.lat]); src.setData(lineGeo(c)); }
   }
 }
-function updateMap(){ if (ride && ride.route && mlMap && !mlRaf) mlRaf = requestAnimationFrame(mlFrame); }
+function updateMap(){ if (ride && ride.route && mlMap && !mlRaf && settings.mapView !== 'world') mlRaf = requestAnimationFrame(mlFrame); }
+const worldState = () => { const r = ride; if (!r || !r.route) return null; const moving = r.running && !r.paused;
+  return {d:clamp(r.dist + (moving ? r.vs*Math.min(0.3, (performance.now() - lastTick)/1000) : 0), 0, r.route.dist), v:moving ? r.vs : 0,
+    cad:hasCad() && moving ? live.cad : 0, visible:settings.mapView === 'world' && !$('#ride').classList.contains('hidden')}; };
+function applyView(){
+  const r = ride; if (!r || !r.route) return;
+  const v = settings.mapView || 'world';
+  $('#mView').value = v;
+  $('#world').classList.toggle('hidden', v !== 'world'); $('#map').classList.toggle('hidden', v === 'world');
+  $('#mBase').classList.toggle('hidden', v === 'world'); if (v === 'world') $('#mFollow').classList.add('hidden');
+  if (v === 'world'){
+    if (!window.World){ settings.mapView = 'map3d'; return applyView(); }
+    World.start(r.route, $('#world'), worldState).then(ok => { if (!ok && ride === r){ toast('Comic-Welt wird auf diesem Gerät nicht unterstützt – zeige Karte'); settings.mapView = 'map3d'; applyView(); } });
+  } else {
+    if (window.World) World.stop();
+    settings.map3d = v === 'map3d';
+    if (!mlMap || mlRouteId !== r.route.id) setupMap(r.route); else { setTimeout(() => mlMap && mlMap.resize(), 30); }
+    mlFollow = true; updateMap();
+  }
+}
 function drawElev(r){
   const cv = $('#elev'), rt = r.route, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W || !H || !rt) return;
@@ -826,7 +848,7 @@ function openRide(w){
     route:null, dist:0, odo:0, vs:0, gear:0, climb:0, lastEle:null};
   const rid = w.routeId || settings.mapRoute, rt = rid ? getRoutes().find(x => x.id === rid) : null;
   $('#mapWrap').classList.toggle('hidden', !rt); $('#rmain').classList.toggle('routeonly', !!(rt && w.routeRide));
-  if (rt){ ride.route = rt; setupMap(rt); }
+  if (rt){ ride.route = rt; setTimeout(applyView, 0); } else if (window.World) World.stop();
   $('#rName').textContent = `${w.name} · ${prof().name}`;
   $('#cPause').textContent = 'Pause';
   $('#ride').classList.remove('hidden');
@@ -1351,12 +1373,12 @@ $('#btnWipe').onclick = () => {
   if (!confirm('Alle Einstellungen, Trainings und den Verlauf löschen?')) return;
   Object.keys(localStorage).filter(k => k.startsWith('rr_')).forEach(k => localStorage.removeItem(k)); location.reload();
 };
-window.addEventListener('resize', () => { if (mlMap) mlMap.resize(); });
-$('#m3d').onclick = () => { settings.map3d = settings.map3d === false; saveSettings(); $('#m3d').textContent = settings.map3d === false ? '3D' : '2D'; mlFollow = true; $('#mFollow').classList.add('hidden'); };
+window.addEventListener('resize', () => { if (mlMap) mlMap.resize(); if (window.World) World.resize(); });
+$('#mView').onchange = e => { settings.mapView = e.target.value; saveSettings(); applyView(); };
 $('#mBase').onchange = e => { if (!ride || !ride.route || !mlMap) return; mlBase = e.target.value; settings.mapBase = mlBase; saveSettings(); mlMap.setStyle(mlStyle(ride.route, mlBase)); mlLastDone = 0; };
 $('#mFollow').onclick = () => { mlFollow = true; $('#mFollow').classList.add('hidden'); };
 window.addEventListener('beforeunload', e => { if (ride && ride.running){ e.preventDefault(); e.returnValue = ''; } });
-const APP_VERSION = '10';
+const APP_VERSION = '11';
 if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(r => r.update()).catch(() => {});
   let reloaded = false;
