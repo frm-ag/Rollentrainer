@@ -8,6 +8,8 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Rolle – Indoor-Training</title>
+<link rel="stylesheet" href="lib/leaflet.css">
+<script src="lib/leaflet.js" defer></script>
 <style>
 :root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--line:#2a2f3a;--text:#e8eaf0;--muted:#8a91a3;--acc:#ff6a1a;--ok:#22c55e;--warn:#facc15;--bad:#ef4444}
 *{box-sizing:border-box}
@@ -112,6 +114,18 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
 .prog{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin:10px 0 4px}.prog i{display:block;height:100%;background:var(--acc)}
 .choice{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .choice button.sel{border-color:var(--acc);background:rgba(255,106,26,.12)}
+/* Karte */
+.rmain{flex:1;display:flex;gap:8px;min-height:240px}
+.rmain .chartwrap{flex:1}
+.mapwrap{flex:1.4;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+#map{flex:1;min-height:160px;background:#20242c}
+#elev{display:block;width:100%;height:78px;border-top:1px solid var(--line)}
+.rmain.routeonly .chartwrap{display:none}
+@media (max-width:700px){.rmain{flex-direction:column}.rmain .chartwrap{min-height:140px}}
+.leaflet-container{font:inherit}
+.rider-dot{width:18px;height:18px;border-radius:50%;background:var(--acc);border:3px solid #fff;box-shadow:0 0 0 3px rgba(255,106,26,.45)}
+.routes{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+select{background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;max-width:100%}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#252b36;border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
 </style>
@@ -138,6 +152,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
   <section id="tab-workouts">
     <div id="btBanner"></div>
     <div class="card ftpcard" id="ftpCard"></div>
+    <div id="routeBox"></div>
     <div id="wkList"></div>
   </section>
   <section id="tab-history"><div id="histList"></div></section>
@@ -155,6 +170,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
     <h2>Allgemein</h2>
     <div class="card">
       <div class="row"><div><b>Töne</b><div class="muted s">Piepser bei Intervallwechsel</div></div><input type="checkbox" id="sSound"></div>
+      <div class="row"><div><b>Steigungs-Stärke (Routen)</b><div class="muted s">wie stark die Steigung der Route am Trainer spürbar ist (D100: max. 6 %)</div></div><select id="sDiff"><option value="0.5">50 %</option><option value="0.75">75 %</option><option value="1">100 %</option></select></div>
       <div class="row"><div><b>Auto-Pause</b><div class="muted s">Zeit stoppt, wenn du aufhörst zu treten</div></div><input type="checkbox" id="sAuto"></div>
       <div class="row"><div><b>Demo-Modus</b><div class="muted s">Simuliert Trainer-Daten – zum Ausprobieren ohne Rolle</div></div><input type="checkbox" id="sDemo"></div>
     </div>
@@ -175,7 +191,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
   <div class="rtop"><div class="n" id="rName"></div><div class="muted s" id="rState"></div><button id="rEnd">Beenden</button></div>
   <div class="metrics">
     <div class="m pw"><label>Leistung (3 s)</label><span id="mPow">0</span><small id="mPowSub">W</small></div>
-    <div class="m tg"><label>Ziel</label><span id="mTgt">–</span><small id="mTgtSub"></small></div>
+    <div class="m tg"><label id="mTgtLbl">Ziel</label><span id="mTgt">–</span><small id="mTgtSub"></small></div>
     <div class="m"><label>Kadenz</label><span id="mCad">0</span><small>rpm</small></div>
     <div class="m"><label>Puls</label><span id="mHr">–</span><small id="mHrSub">bpm</small></div>
     <div class="m"><label>Zeit</label><span id="mEl">0:00</span><small id="mRem"></small></div>
@@ -186,7 +202,7 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
     <div class="irem" id="iRem">0:00</div>
     <div class="next" id="iNext"></div>
   </div>
-  <div class="chartwrap"><canvas id="chart"></canvas></div>
+  <div class="rmain" id="rmain"><div class="mapwrap hidden" id="mapWrap"><div id="map"></div><canvas id="elev"></canvas></div><div class="chartwrap"><canvas id="chart"></canvas></div></div>
   <div class="ctrl">
     <div class="adj"><button id="cMinus">−</button><div id="cLbl"></div><button id="cPlus">+</button></div>
     <button id="cPause">Pause</button>
@@ -217,7 +233,7 @@ const LS = {
 let toastT;
 function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
 
-const settings = Object.assign({sound:true, autoPause:true}, LS.get('rr_settings', {}));
+const settings = Object.assign({sound:true, autoPause:true, difficulty:1, mapRoute:''}, LS.get('rr_settings', {}));
 /* Profile: jedes Profil hat eigene Körperdaten, FTP-Verlauf und Trainingsverlauf */
 let profiles = LS.get('rr_profiles', null);
 if (!profiles){
@@ -231,7 +247,7 @@ let activeId = LS.get('rr_active', profiles[0].id);
 const prof = () => profiles.find(p => p.id === activeId) || profiles[0];
 ['ftp', 'weight', 'ftpLog', 'hrMax', 'age', 'hrRest'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
 const histKey = () => 'rr_hist_' + prof().id;
-const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
+const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause, difficulty:settings.difficulty, mapRoute:settings.mapRoute}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
 function switchProfile(id){
   if (ride && ride.running){ toast('Während eines Trainings kann das Profil nicht gewechselt werden'); return; }
   activeId = id; saveSettings(); renderAll(); closeModal(); toast(`Profil: ${prof().name} · FTP ${prof().ftp} W`);
@@ -309,6 +325,144 @@ const BUILTIN = (() => {
 })();
 const allWorkouts = () => [...BUILTIN, ...LS.get('rr_custom', [])];
 
+/* ---------- Routen & Karte ---------- */
+const hav = (a, b, c, d) => { const R = 6371000, r = Math.PI/180, x = (c - a)*r, y = (d - b)*r;
+  const h = Math.sin(x/2)**2 + Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2; return 2*R*Math.asin(Math.sqrt(h)); };
+const getRoutes = () => LS.get('rr_routes', []);
+function parseGPX(txt, fname){
+  const doc = new DOMParser().parseFromString(txt, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('keine gültige GPX-Datei');
+  let pts = [...doc.getElementsByTagName('trkpt')]; if (pts.length < 2) pts = [...doc.getElementsByTagName('rtept')];
+  if (pts.length < 2) pts = [...doc.getElementsByTagName('wpt')];
+  if (pts.length < 2) throw new Error('keine Streckenpunkte gefunden');
+  const raw = pts.map(p => { const e = p.getElementsByTagName('ele')[0]; return [parseFloat(p.getAttribute('lat')), parseFloat(p.getAttribute('lon')), e ? parseFloat(e.textContent) : NaN]; })
+    .filter(p => isFinite(p[0]) && isFinite(p[1]));
+  const hasEle = raw.filter(p => isFinite(p[2])).length > raw.length*0.8;
+  // auf ~15 m ausdünnen
+  const out = []; let d = 0, last = null;
+  for (const p of raw){
+    if (!last){ out.push([p[0], p[1], p[2], 0]); last = p; continue; }
+    const dd = hav(last[0], last[1], p[0], p[1]); if (dd < 15) continue;
+    d += dd; out.push([p[0], p[1], p[2], d]); last = p;
+  }
+  if (out.length < 2) throw new Error('Strecke zu kurz');
+  // Höhe: Lücken füllen und über ±60 m glätten
+  for (let i = 0; i < out.length; i++) if (!isFinite(out[i][2])) out[i][2] = i ? out[i-1][2] : (out.find(x => isFinite(x[2])) || [0, 0, 0])[2];
+  if (!hasEle) out.forEach(p => p[2] = 0);
+  const sm = out.map((p, i) => { let s = 0, n = 0;
+    for (let j = i; j >= 0 && p[3] - out[j][3] <= 60; j--){ s += out[j][2]; n++; }
+    for (let j = i + 1; j < out.length && out[j][3] - p[3] <= 60; j++){ s += out[j][2]; n++; } return s/n; });
+  out.forEach((p, i) => { p[0] = +p[0].toFixed(6); p[1] = +p[1].toFixed(6); p[2] = Math.round(sm[i]*10)/10; p[3] = Math.round(p[3]*10)/10; });
+  let gain = 0; for (let i = 1; i < out.length; i++){ const dz = out[i][2] - out[i-1][2]; if (dz > 0) gain += dz; }
+  const nm = doc.querySelector('trk > name, rte > name, metadata > name');
+  const first = out[0], lst = out[out.length - 1];
+  return {id:'r' + Date.now() + Math.random().toString(36).slice(2, 5), name:((nm && nm.textContent.trim()) || fname.replace(/\.gpx$/i, '')).slice(0, 60),
+    pts:out, dist:lst[3], gain:Math.round(gain), hasEle, loop: hav(first[0], first[1], lst[0], lst[1]) < 150};
+}
+function routeAt(rt, d){
+  const P = rt.pts; d = clamp(d, 0, rt.dist);
+  let lo = 0, hi = P.length - 1; while (hi - lo > 1){ const m = (lo + hi) >> 1; if (P[m][3] <= d) lo = m; else hi = m; }
+  const a = P[lo], b = P[hi], f = b[3] > a[3] ? (d - a[3])/(b[3] - a[3]) : 0;
+  return {lat:a[0] + (b[0] - a[0])*f, lon:a[1] + (b[1] - a[1])*f, ele:a[2] + (b[2] - a[2])*f};
+}
+function routeGrade(rt, d){
+  if (!rt.hasEle) return 0;
+  const a = Math.max(0, d - 40), b = Math.min(rt.dist, d + 40); if (b - a < 10) return 0;
+  return clamp((routeAt(rt, b).ele - routeAt(rt, a).ele)/(b - a)*100, -20, 20);
+}
+/* Fahrphysik: Geschwindigkeit aus Leistung, Steigung und Gewicht (Fahrer + 9 kg Rad) */
+function speedFromPower(P, grade){
+  const m = settings.weight + 9, g = 9.81, th = Math.atan(grade/100), crr = 0.004, cda = 0.32, rho = 1.2;
+  const a = m*g*(crr*Math.cos(th) + Math.sin(th)), b = 0.5*rho*cda;
+  const f = v => a*v + b*v*v*v;
+  let lo = 0, hi = 30;
+  if (a < 0){ lo = Math.sqrt(-a/(3*b)); }   // Minimum der Leistungskurve bei Gefälle
+  if (f(hi) < P) return hi;
+  if (f(lo) > P) return a < 0 ? Math.max(0, Math.sqrt(Math.max(0, -a/b))) : 0;
+  for (let i = 0; i < 40; i++){ const mid = (lo + hi)/2; if (f(mid) < P) lo = mid; else hi = mid; }
+  return (lo + hi)/2;
+}
+function elevSVG(rt){
+  const W = 300, H = 54, P = rt.pts, step = Math.max(1, Math.floor(P.length/150));
+  const es = P.map(p => p[2]), mn = Math.min(...es), mx = Math.max(...es, mn + 30);
+  let pth = `M0,${H}`;
+  for (let i = 0; i < P.length; i += step) pth += ` L${(P[i][3]/rt.dist*W).toFixed(1)},${(H - 4 - (P[i][2] - mn)/(mx - mn)*(H - 10)).toFixed(1)}`;
+  pth += ` L${W},${(H - 4 - (P[P.length-1][2] - mn)/(mx - mn)*(H - 10)).toFixed(1)} L${W},${H} Z`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${pth}" fill="#3b82f6" opacity=".75"/></svg>`;
+}
+const routeWorkout = rt => ({id:'route_' + rt.id, routeId:rt.id, routeRide:true, openEnd:true, name:rt.name,
+  desc:`${(rt.dist/1000).toFixed(1)} km · ${rt.gain} Hm. Die Steigung wird an den Trainer übertragen, deine Geschwindigkeit ergibt sich aus Leistung und Gewicht. +/− schaltet virtuelle Gänge.`,
+  segs:[{dur:24*3600, p0:0, p1:0, kind:'route', label:'Route'}]});
+const inCH = rt => { const p = rt.pts[Math.floor(rt.pts.length/2)]; return p[0] > 45.8 && p[0] < 47.9 && p[1] > 5.9 && p[1] < 10.6; };
+let lmap = null, lLayers = null, lLine = null, lDone = null, lDot = null, lLastPan = 0;
+function setupMap(rt){
+  if (!window.L){ toast('Karte konnte nicht geladen werden'); return false; }
+  if (!lmap){
+    lmap = L.map('map', {zoomControl:true, attributionControl:true});
+    const sw = 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.';
+    lLayers = {
+      'Luftbild CH (swisstopo)': L.tileLayer(sw + 'swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {maxZoom:19, attribution:'© swisstopo'}),
+      'Landeskarte CH (swisstopo)': L.tileLayer(sw + 'pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {maxZoom:18, attribution:'© swisstopo'}),
+      'Luftbild Welt (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:18, attribution:'Tiles © Esri'}),
+      'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'})};
+    L.control.layers(lLayers, null, {position:'topright'}).addTo(lmap);
+  }
+  lmap.setView([rt.pts[0][0], rt.pts[0][1]], 16, {animate:false});
+  Object.values(lLayers).forEach(l => lmap.removeLayer(l));
+  lLayers[inCH(rt) ? 'Luftbild CH (swisstopo)' : 'Luftbild Welt (Esri)'].addTo(lmap);
+  [lLine, lDone, lDot].forEach(x => x && lmap.removeLayer(x));
+  const ll = rt.pts.map(p => [p[0], p[1]]);
+  lLine = L.polyline(ll, {color:'#ffffff', weight:5, opacity:.85}).addTo(lmap);
+  lDone = L.polyline([], {color:'#ff6a1a', weight:5}).addTo(lmap);
+  lDot = L.marker(ll[0], {icon:L.divIcon({className:'', html:'<div class="rider-dot"></div>', iconSize:[18, 18], iconAnchor:[9, 9]}), interactive:false}).addTo(lmap);
+  setTimeout(() => { lmap.invalidateSize(); lmap.setView(ll[0], 16); }, 50);
+  return true;
+}
+function updateMap(r){
+  if (!lmap || !r.route) return;
+  const rt = r.route, p = routeAt(rt, r.dist);
+  lDot.setLatLng([p.lat, p.lon]);
+  const now = performance.now();
+  if (now - lLastPan > 1000){
+    lLastPan = now; lmap.panTo([p.lat, p.lon], {animate:true, duration:0.8});
+    const P = rt.pts, out = []; for (const q of P){ if (q[3] > r.dist) break; out.push([q[0], q[1]]); } out.push([p.lat, p.lon]);
+    lDone.setLatLngs(out);
+  }
+}
+function drawElev(r){
+  const cv = $('#elev'), rt = r.route, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H || !rt) return;
+  if (cv.width !== Math.round(W*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const P = rt.pts, es = P.map(p => p[2]), mn = Math.min(...es), mx = Math.max(...es, mn + 30);
+  const X = d => d/rt.dist*W, Y = e => H - 4 - (e - mn)/(mx - mn)*(H - 22);
+  const path = () => { g.beginPath(); g.moveTo(0, H); for (const p of P) g.lineTo(X(p[3]), Y(p[2])); g.lineTo(W, H); g.closePath(); };
+  path(); g.fillStyle = 'rgba(59,130,246,.35)'; g.fill();
+  g.save(); g.beginPath(); g.rect(0, 0, X(r.dist), H); g.clip(); path(); g.fillStyle = 'rgba(255,106,26,.75)'; g.fill(); g.restore();
+  const cur = routeAt(rt, r.dist); g.fillStyle = '#fff'; g.beginPath(); g.arc(X(r.dist), Y(cur.ele), 4, 0, 7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.75)'; g.font = '11px sans-serif';
+  g.fillText(`${Math.round(cur.ele)} m ü. M.`, 6, 13);
+  const t = `${(rt.dist/1000).toFixed(1)} km · ${rt.gain} Hm`; g.fillText(t, W - g.measureText(t).width - 6, 13);
+}
+function renderRoutes(){
+  const rs = getRoutes();
+  $('#routeBox').innerHTML = `<h2>Routen (mit Karte)</h2><div class="note">GPX-Datei importieren (z.B. aus Strava, Komoot oder gpx.studio). Die Steigung wird an den Trainer übertragen – wie bei Rouvy.</div>
+    ${rs.length ? `<div class="routes">${rs.map(rt => `<div class="card wk" data-route="${rt.id}"><div class="t">${esc(rt.name)}</div>${elevSVG(rt)}
+      <div class="meta"><span>${(rt.dist/1000).toFixed(1)} km</span><span>↑ ${rt.gain} Hm</span>${rt.loop ? '<span>Rundkurs</span>' : ''}${rt.hasEle ? '' : '<span style="color:var(--warn)">ohne Höhe</span>'}
+      <span class="del" data-rdel="${rt.id}">Löschen</span></div></div>`).join('')}</div>` : ''}
+    <div class="card" style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label class="btn"><input type="file" id="gpxFile" accept=".gpx,application/gpx+xml" multiple hidden>GPX importieren</label>
+      ${rs.length ? `<div class="s"><span class="muted">Karte auch bei Intervall-Trainings:</span> <select id="mapSel"><option value="">keine</option>${rs.map(rt => `<option value="${rt.id}" ${settings.mapRoute === rt.id ? 'selected' : ''}>${esc(rt.name)}</option>`).join('')}</select></div>` : ''}
+    </div>`;
+  $('#gpxFile').onchange = async e => {
+    const rs2 = getRoutes(); let n = 0;
+    for (const f of e.target.files){ try { const rt = parseGPX(await f.text(), f.name); rs2.push(rt); n++; if (!rt.hasEle) toast(`${rt.name}: keine Höhendaten – Strecke bleibt flach`); } catch(err){ toast(`${f.name}: ${err.message}`); } }
+    if (n){ if (LS.set('rr_routes', rs2)){ toast(`${n} Route(n) importiert`); } renderRoutes(); }
+    e.target.value = '';
+  };
+  const ms = $('#mapSel'); if (ms) ms.onchange = e => { settings.mapRoute = e.target.value; saveSettings(); };
+}
+
 /* ---------- Trainingsplan (6-Wochen-VO2max-Block) ---------- */
 const WB = (() => {
   const ss = (m, p, l, tag) => ({dur:Math.round(m*60), p0:p, p1:p, kind:'erg', label:l, tag});
@@ -360,7 +514,7 @@ function markPlanDone(key, on = true){
   saveSettings(); renderPlan();
 }
 const totalOf = w => w.segs.reduce((a, s) => a + s.dur, 0);
-function durLabel(w){ if (w.test === 'ramp') return 'ca. 20 min'; if (w.openEnd) return 'offen'; return Math.round(totalOf(w)/60) + ' min'; }
+function durLabel(w){ if (w.test === 'ramp') return 'ca. 20 min'; if (w.routeRide) return 'Route'; if (w.openEnd) return 'offen'; return Math.round(totalOf(w)/60) + ' min'; }
 function tssEst(w){
   if (w.openEnd) return '–'; if (w.test === 'ramp') return '~30';
   let s4 = 0, tot = 0;
@@ -627,7 +781,11 @@ function openRide(w){
   const p = prepare(w), rs = p.segs.find(s => s.tag === 'ramp');
   ride = {w:p, t:0, elapsed:0, running:false, paused:false, autoPaused:false, finished:false, bias:1, freeAdj:{}, level:3,
     samples:[], segIdx:0, lastSeg:null, lastTargetSent:null, lastGradeSent:null, swGrade:1, idleMs:0, failS:0,
-    rampStart: rs ? rs.start : 0, rampDone:false, kj:0, roll:[], rollSum:0, np4:0, npN:0, maxP:0, startedAt:null};
+    rampStart: rs ? rs.start : 0, rampDone:false, kj:0, roll:[], rollSum:0, np4:0, npN:0, maxP:0, startedAt:null,
+    route:null, dist:0, odo:0, vs:0, gear:0, climb:0, lastEle:null};
+  const rid = w.routeId || settings.mapRoute, rt = rid ? getRoutes().find(x => x.id === rid) : null;
+  $('#mapWrap').classList.toggle('hidden', !rt); $('#rmain').classList.toggle('routeonly', !!(rt && w.routeRide));
+  if (rt){ ride.route = rt; setupMap(rt); }
   $('#rName').textContent = `${w.name} · ${prof().name}`;
   $('#cPause').textContent = 'Pause';
   $('#ride').classList.remove('hidden');
@@ -665,7 +823,7 @@ async function startRide(){
 }
 function curSeg(){ const r = ride, s = r.w.segs; let i = r.segIdx; while (i < s.length-1 && r.t >= s[i].start + s[i].dur) i++; r.segIdx = i; return s[i]; }
 function targetAt(seg, t){
-  if (!seg || seg.kind === 'sim') return null;
+  if (!seg || seg.kind === 'sim' || seg.kind === 'route') return null;
   const f = seg.dur ? clamp((t - seg.start)/seg.dur, 0, 1) : 0, pct = seg.p0 + (seg.p1 - seg.p0)*f;
   const w = seg.kind === 'free' ? Math.round(pct*settings.ftp) + (ride.freeAdj[seg.start] || 0)
                                 : Math.round(pct*settings.ftp*(seg.tag === 'ramp' ? 1 : ride.bias));
@@ -673,11 +831,14 @@ function targetAt(seg, t){
 }
 function segWatt(s, pct){ return s.kind === 'free' ? pct*settings.ftp + (ride.freeAdj[s.start] || 0) : pct*settings.ftp*(s.tag === 'ramp' ? 1 : ride.bias); }
 const levelGrade = l => Math.round((l-1)*(6/9)*10)/10;
+/* Steigung am Trainer: Route × Stärke + virtueller Gang (je Gang 0.5 %) */
+const effGrade = r => Math.round(clamp(routeGrade(r.route, r.dist)*settings.difficulty + r.gear*0.5, -10, 20)*10)/10;
 
 function applyResistance(){
   const r = ride; if (!r || !r.running || r.paused || r.finished || !trainer.connected || demo) return;
   const seg = curSeg();
   if (seg.kind === 'sim'){ const g = levelGrade(r.level); if (g !== r.lastGradeSent){ cpSend(simCmd(g)); r.lastGradeSent = g; r.lastTargetSent = null; } return; }
+  if (seg.kind === 'route'){ const g = effGrade(r); if (r.lastGradeSent == null || Math.abs(g - r.lastGradeSent) >= 0.1){ cpSend(simCmd(g)); r.lastGradeSent = g; r.lastTargetSent = null; } return; }
   const tgt = targetAt(seg, r.t);
   if (trainer.ergNative){ if (tgt !== r.lastTargetSent){ cpSend(powerCmd(tgt)); r.lastTargetSent = tgt; r.lastGradeSent = null; } }
   else {  // Software-ERG: Steigung so nachregeln, dass die Zielleistung erreicht wird
@@ -688,7 +849,8 @@ function applyResistance(){
 function adjust(dir){
   const r = ride; if (!r || !r.running || r.finished) return;
   const seg = curSeg(); if (seg.tag === 'ramp') return;
-  if (seg.kind === 'sim') r.level = clamp(r.level + dir, 1, 10);
+  if (seg.kind === 'route') r.gear = clamp(r.gear + dir, -6, 6);
+  else if (seg.kind === 'sim') r.level = clamp(r.level + dir, 1, 10);
   else if (seg.kind === 'free') r.freeAdj[seg.start] = (r.freeAdj[seg.start] || 0) + dir*5;
   else r.bias = clamp(Math.round((r.bias + dir*0.05)*100)/100, 0.5, 1.5);
   beep(dir > 0 ? 1100 : 700, 0.05, 0.08);
@@ -721,8 +883,11 @@ function everySecond(){
   const r = ride, seg = curSeg();
   if (r.segIdx !== r.lastSeg){ if (r.lastSeg !== null){ beep(990, 0.25, 0.18); toast(seg.label); } r.lastSeg = r.segIdx; r.failS = 0; r.lastTargetSent = null; }
   const tgt = targetAt(seg, r.t);
-  const p = Math.round(live.power), c = Math.round(live.cad), h = Math.round(live.hr) || 0, v = live.speed;
-  r.samples.push({pos:r.t, p, c, h, v, tag:seg.tag || ''});
+  const p = Math.round(live.power), c = Math.round(live.cad), h = Math.round(live.hr) || 0, v = r.route ? r.vs*3.6 : live.speed;
+  const smp = {pos:r.t, p, c, h, v, tag:seg.tag || ''};
+  if (r.route){ const q = routeAt(r.route, r.dist); smp.la = +q.lat.toFixed(6); smp.lo = +q.lon.toFixed(6); smp.el = Math.round(q.ele*10)/10;
+    if (r.lastEle != null && q.ele > r.lastEle) r.climb += q.ele - r.lastEle; r.lastEle = q.ele; }
+  r.samples.push(smp);
   r.kj += p/1000; r.maxP = Math.max(r.maxP, p);
   r.roll.push(p); r.rollSum += p; if (r.roll.length > 30) r.rollSum -= r.roll.shift();
   if (r.roll.length === 30){ r.np4 += Math.pow(r.rollSum/30, 4); r.npN++; }
@@ -736,7 +901,8 @@ function everySecond(){
 }
 function demoStep(now){
   let tgt = 140; const r = ride;
-  if (r && r.running && !r.paused){ const t = targetAt(curSeg(), r.t); tgt = t != null ? t : 90 + r.level*20; }
+  if (r && r.running && !r.paused){ const sg = curSeg(), t = targetAt(sg, r.t);
+    tgt = t != null ? t : sg.kind === 'route' ? clamp(settings.ftp*0.7 + effGrade(r)*18, 60, settings.ftp*1.2) : 90 + r.level*20; }
   const failing = tgt > settings.ftp*1.33;
   live.cad = failing ? Math.max(0, live.cad - 5) : 86 + Math.sin(now/4000)*4 + (Math.random() - .5)*3;
   live.power = Math.max(0, live.power + ((failing ? tgt*0.3 : tgt) - live.power)*0.25 + (Math.random() - .5)*10);
@@ -760,6 +926,15 @@ function tick(){
     else r.idleMs = 0;
     if (!r.paused){
       r.t += dt; r.elapsed += dt;
+      if (r.route){
+        const vt = speedFromPower(live.power, routeGrade(r.route, r.dist));
+        r.vs += (vt - r.vs)*Math.min(1, dt/4);
+        const step = r.vs*dt; r.dist += step; r.odo += step;
+        if (r.dist >= r.route.dist){
+          if (r.w.routeRide){ r.dist = r.route.dist; if (ride === r) { finishRide(); return; } }
+          else r.dist = r.route.loop ? r.dist - r.route.dist : r.route.dist;
+        }
+      }
       while (ride === r && !r.finished && r.samples.length < Math.floor(r.elapsed)) everySecond();
       if (ride === r && !r.finished && !r.w.openEnd && r.t >= r.w.total) finishRide();
     }
@@ -774,34 +949,47 @@ function renderRide(){
   const pe = $('#mPow'); pe.textContent = pw;
   $('#mPowSub').textContent = `W · ${(pw/settings.weight).toFixed(1)} W/kg`;
   if (tgt != null && r.running && !r.paused){ const tol = Math.max(8, tgt*0.06); pe.style.color = Math.abs(pw - tgt) <= tol ? 'var(--ok)' : (pw < tgt ? 'var(--warn)' : ''); } else pe.style.color = '';
-  $('#mTgt').textContent = tgt == null ? r.level : tgt;
-  $('#mTgtSub').textContent = tgt == null ? `Stufe von 10 (${levelGrade(r.level)} %)` : `${Math.round(tgt/ftp*100)} % FTP · ${zoneOf(tgt/ftp).n}`;
+  const onRoute = seg.kind === 'route';
+  $('#mTgtLbl').textContent = onRoute ? 'Steigung' : 'Ziel';
+  if (onRoute){ const gr = routeGrade(r.route, r.dist); $('#mTgt').textContent = (Math.round(gr*10)/10).toFixed(1) + ' %';
+    $('#mTgt').style.color = gr >= 6 ? '#ef4444' : gr >= 3 ? '#f97316' : gr <= -2 ? '#3b82f6' : '';
+    $('#mTgtSub').textContent = `Trainer: ${effGrade(r)} % · Gang ${r.gear > 0 ? '+' : ''}${r.gear}`; }
+  else { $('#mTgt').style.color = ''; $('#mTgt').textContent = tgt == null ? r.level : tgt;
+    $('#mTgtSub').textContent = tgt == null ? `Stufe von 10 (${levelGrade(r.level)} %)` : `${Math.round(tgt/ftp*100)} % FTP · ${zoneOf(tgt/ftp).n}`; }
   $('#mCad').textContent = hasCad() ? Math.round(live.cad) : '–';
   $('#mHr').textContent = live.hr ? Math.round(live.hr) : '–';
   $('#mHrSub').textContent = live.hr && hrMaxEff() ? `bpm · ${hrZone(live.hr)}` : 'bpm';
   $('#mEl').textContent = fmt(r.elapsed);
   const open = r.w.openEnd || (r.w.test === 'ramp' && !r.rampDone);
-  $('#mRem').textContent = open ? 'Fahrzeit' : `noch ${fmt(r.w.total - r.t)}`;
+  $('#mRem').textContent = r.route ? `${(r.vs*3.6).toFixed(1)} km/h · ${(r.odo/1000).toFixed(2)} km` : open ? 'Fahrzeit' : `noch ${fmt(r.w.total - r.t)}`;
   $('#mNp').textContent = r.npN ? Math.round(Math.pow(r.np4/r.npN, 0.25)) : '–';
   $('#mKj').textContent = `${Math.round(r.kj)} kJ`;
-  $('#iLbl').textContent = seg.label + (seg.kind === 'free' ? ' · Watt selbst steuern' : '');
-  const inSeg = r.t - seg.start;
-  $('#iRem').textContent = r.w.openEnd ? fmt(inSeg) : fmt(seg.start + seg.dur - r.t);
-  const bar = $('#iBar'); bar.style.width = r.w.openEnd ? '0%' : clamp(inSeg/seg.dur*100, 0, 100) + '%';
-  bar.style.background = tgt != null ? zoneOf(tgt/ftp).c : 'var(--acc)';
-  const nx = r.w.segs[r.segIdx + 1];
-  $('#iNext').innerHTML = nx ? `Danach<br><b>${esc(nx.label)}</b><br>${fmt(nx.dur)} · ${nx.kind === 'free' ? 'frei' : Math.round(segWatt(nx, nx.p0)) + ' W'}` : '';
+  const inSeg = r.t - seg.start, bar = $('#iBar');
+  if (onRoute){
+    const rt = r.route; $('#iLbl').textContent = `${esc(rt.name)} · ${(r.dist/1000).toFixed(2)} / ${(rt.dist/1000).toFixed(1)} km · ↑ ${Math.round(r.climb)} Hm`;
+    $('#iRem').textContent = `${((rt.dist - r.dist)/1000).toFixed(1)} km`; bar.style.width = clamp(r.dist/rt.dist*100, 0, 100) + '%'; bar.style.background = 'var(--acc)';
+  } else {
+    $('#iLbl').textContent = seg.label + (seg.kind === 'free' ? ' · Watt selbst steuern' : '');
+    $('#iRem').textContent = r.w.openEnd ? fmt(inSeg) : fmt(seg.start + seg.dur - r.t);
+    bar.style.width = r.w.openEnd ? '0%' : clamp(inSeg/seg.dur*100, 0, 100) + '%';
+    bar.style.background = tgt != null ? zoneOf(tgt/ftp).c : 'var(--acc)';
+  }
+  const nx = onRoute ? null : r.w.segs[r.segIdx + 1];
+  $('#iNext').innerHTML = onRoute ? (() => { const a = routeAt(r.route, Math.min(r.route.dist, r.dist + 500)).ele - routeAt(r.route, r.dist).ele;
+      return `Nächste 500 m<br><b>${a >= 0 ? '+' : ''}${Math.round(a)} m</b><br>Ø ${(a/5).toFixed(1)} %`; })() : nx ? `Danach<br><b>${esc(nx.label)}</b><br>${fmt(nx.dur)} · ${nx.kind === 'free' ? 'frei' : Math.round(segWatt(nx, nx.p0)) + ' W'}` : '';
   let lbl, dis = false;
   if (seg.tag === 'ramp'){ lbl = 'Rampentest'; dis = true; }
   else if (seg.kind === 'sim') lbl = `Stufe ${r.level}/10`;
+  else if (onRoute) lbl = `Gang ${r.gear > 0 ? '+' : ''}${r.gear} (leichter − / + schwerer)`;
   else if (seg.kind === 'free') lbl = `Ziel ${tgt} W (±5)`;
   else lbl = `Intensität ${Math.round(r.bias*100)} %`;
   $('#cLbl').textContent = lbl; $('#cMinus').disabled = $('#cPlus').disabled = dis || !r.running;
   const sk = $('#cSkip'); sk.textContent = seg.tag === 'ramp' ? 'Test beenden' : 'Überspringen'; sk.disabled = !r.running || r.w.openEnd;
   $('#cPause').disabled = !r.running;
   $('#rState').textContent = !r.running ? '' : r.paused ? (r.autoPaused ? 'Auto-Pause – lostreten' : 'Pausiert')
-    : demo ? 'Demo' : trainer.connected ? (seg.kind === 'sim' ? 'SIM' : trainer.ergNative ? 'ERG' : 'ERG (App)') : 'kein Trainer';
-  drawChart();
+    : demo ? 'Demo' : trainer.connected ? (seg.kind === 'sim' || onRoute ? 'SIM' : trainer.ergNative ? 'ERG' : 'ERG (App)') : 'kein Trainer';
+  if (r.route){ updateMap(r); drawElev(r); }
+  if (!(onRoute && r.w.routeRide)) drawChart();
 }
 function drawChart(){
   const r = ride, cv = $('#chart'), wrap = cv.parentElement, dpr = window.devicePixelRatio || 1, W = wrap.clientWidth, H = wrap.clientHeight;
@@ -865,6 +1053,7 @@ function finishRide(){
     const S = r.samples;
     entry = {...sum, id:'h' + Date.now(), date:r.startedAt, name:r.w.name, ftpAt:settings.ftp, rider:prof().name,
       s:{p:S.map(x => x.p), c:S.map(x => x.c), h:S.map(x => x.h), v:S.map(x => Math.round(x.v*10)/10)}};
+    if (r.route){ entry.s.la = S.map(x => x.la); entry.s.lo = S.map(x => x.lo); entry.s.el = S.map(x => x.el); entry.climb = Math.round(r.climb); entry.route = r.route.name; }
     saveHistory(entry);
   }
   if (r.w.planKey && prof().plan && (r.elapsed >= r.w.total*0.8 || (r.w.test === 'ramp' && r.rampDone))){
@@ -889,7 +1078,7 @@ function showSummary(x, fresh){
       ${fresh ? `<button class="primary" id="adopt" style="margin-top:10px">Als neue FTP übernehmen (bisher ${settings.ftp} W)</button>` : ''}</div>` : '';
   const st = [['Dauer', fmt(x.dur)], ['Ø Leistung', x.avg + ' W'], ['NP', x.np + ' W'], ['IF', Number(x.ifv).toFixed(2)], ['TSS', x.tss], ['Arbeit', x.kj + ' kJ'],
     ['Max', x.maxP + ' W'], ['Beste 1 min', x.b1 ? x.b1 + ' W' : '–'], ['Beste 5 min', x.b5 ? x.b5 + ' W' : '–'],
-    ['Ø Kadenz', x.avgCad ? x.avgCad + ' rpm' : '–'], ['Ø Puls', x.avgHr ? x.avgHr + ' bpm' : '–'], ['Distanz', x.dist.toFixed(1) + ' km']];
+    ['Ø Kadenz', x.avgCad ? x.avgCad + ' rpm' : '–'], ['Ø Puls', x.avgHr ? x.avgHr + ' bpm' : '–'], ['Distanz', x.dist.toFixed(1) + ' km' + (x.climb != null ? ` · ↑ ${x.climb} Hm` : '')]];
   openModal(`<h3>${esc(x.name)}</h3><div class="muted s">${x.date ? dateTimeCH(x.date) : 'zu kurz – nicht gespeichert'}</div>${testHtml}
     <div class="stats">${st.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
     <div class="btns">${x.s ? '<button id="sumTcx">TCX exportieren (Strava/Garmin)</button>' : ''}<button class="primary" id="sumClose">Schliessen</button></div>`);
@@ -908,7 +1097,7 @@ function exportTcx(x){
   let dist = 0, tp = '';
   for (let i = 0; i < s.p.length; i++){
     const v = (s.v[i] || 0)/3.6; dist += v;
-    tp += `<Trackpoint><Time>${iso(x.date + i*1000)}</Time><DistanceMeters>${dist.toFixed(1)}</DistanceMeters>` +
+    tp += `<Trackpoint><Time>${iso(x.date + i*1000)}</Time>` + (s.la && s.la[i] != null ? `<Position><LatitudeDegrees>${s.la[i]}</LatitudeDegrees><LongitudeDegrees>${s.lo[i]}</LongitudeDegrees></Position><AltitudeMeters>${s.el[i]}</AltitudeMeters>` : '') + `<DistanceMeters>${dist.toFixed(1)}</DistanceMeters>` +
       (s.h[i] ? `<HeartRateBpm><Value>${s.h[i]}</Value></HeartRateBpm>` : '') +
       `<Cadence>${Math.min(254, s.c[i] | 0)}</Cadence><Extensions><ns3:TPX><ns3:Speed>${v.toFixed(2)}</ns3:Speed><ns3:Watts>${s.p[i] | 0}</ns3:Watts></ns3:TPX></Extensions></Trackpoint>\n`;
   }
@@ -995,7 +1184,7 @@ function renderSettings(){
       <div class="big" style="color:#3b82f6">${hrAt(.6)}–${hrAt(.7)} <small>bpm</small></div><div class="muted s">${hrMethod()}</div>`;
     $('#hrZoneTbl').innerHTML = HRZ.map(z => `<tr><td>♥ ${z[0]}</td><td class="muted">${z[1]*100}–${z[2]*100} %</td><td style="text-align:right"><b>${hrAt(z[1])}–${hrAt(z[2])} bpm</b></td></tr>`).join('');
   }
-  $('#sSound').checked = settings.sound; $('#sAuto').checked = settings.autoPause; $('#sDemo').checked = demo;
+  $('#sDiff').value = String(settings.difficulty); $('#sSound').checked = settings.sound; $('#sAuto').checked = settings.autoPause; $('#sDemo').checked = demo;
   const f = settings.ftp;
   $('#zoneTbl').innerHTML = ZONES.map((z, i) => {
     const loP = i ? Math.round(ZONES[i-1].max*100) + 1 : 0, hiP = Math.round(z.max*100);
@@ -1054,7 +1243,7 @@ function renderPlan(){
   const nb = $('#planNew'); if (nb) nb.onclick = () => { prof().plan = null; saveSettings(); renderPlan(); };
   $('#planStop').onclick = () => { if (confirm('Plan beenden? Der Fortschritt wird gelöscht.')){ prof().plan = null; saveSettings(); renderPlan(); } };
 }
-function renderAll(){ $('#pProfile span').textContent = prof().name; renderPlan(); renderWorkouts(); renderHistory(); renderSettings(); }
+function renderAll(){ $('#pProfile span').textContent = prof().name; renderPlan(); renderWorkouts(); renderRoutes(); renderHistory(); renderSettings(); }
 
 /* ---------- Events ---------- */
 $('#pProfile').onclick = openProfiles;
@@ -1077,6 +1266,9 @@ document.addEventListener('click', e => {
   const pd = e.target.closest('[data-pdone]'); if (pd){ const k = pd.dataset.pdone; markPlanDone(k, !prof().plan.done[k]); return; }
   const pl = e.target.closest('[data-plan]'); if (pl){ const w = planFind(pl.dataset.plan); if (w) openRide(w); return; }
   const pn = e.target.closest('[data-pn]'); if (pn){ settings._planN = +pn.dataset.pn; renderPlan(); return; }
+  const rd = e.target.closest('[data-rdel]');
+  if (rd){ e.stopPropagation(); if (confirm('Route löschen?')){ LS.set('rr_routes', getRoutes().filter(x => x.id !== rd.dataset.rdel)); if (settings.mapRoute === rd.dataset.rdel){ settings.mapRoute = ''; saveSettings(); } renderRoutes(); } return; }
+  const ro = e.target.closest('[data-route]'); if (ro){ const rt = getRoutes().find(x => x.id === ro.dataset.route); if (rt) openRide(routeWorkout(rt)); return; }
   const st = e.target.closest('[data-start]'); if (st){ const w = allWorkouts().find(x => x.id === st.dataset.start); if (w) openRide(w); return; }
   const tc = e.target.closest('[data-tcx]'); if (tc){ exportTcx(tc.dataset.tcx); return; }
   const hd = e.target.closest('[data-hdel]');
@@ -1104,6 +1296,7 @@ $('#btnProfDel').onclick = () => {
   if (!confirm(`Profil «${prof().name}» mit allen Tests und dem Verlauf löschen?`)) return;
   localStorage.removeItem(histKey()); profiles = profiles.filter(p => p.id !== activeId); switchProfile(profiles[0].id);
 };
+$('#sDiff').onchange = e => { settings.difficulty = parseFloat(e.target.value); saveSettings(); };
 $('#sSound').onchange = e => { settings.sound = e.target.checked; saveSettings(); };
 $('#sAuto').onchange = e => { settings.autoPause = e.target.checked; saveSettings(); };
 $('#sDemo').onchange = e => { demo = e.target.checked; if (!demo){ live.power = live.cad = live.speed = live.hr = 0; } renderLiveStrip(); toast(demo ? 'Demo-Modus an – simulierte Daten' : 'Demo-Modus aus'); };
@@ -1117,6 +1310,7 @@ $('#btnWipe').onclick = () => {
   if (!confirm('Alle Einstellungen, Trainings und den Verlauf löschen?')) return;
   Object.keys(localStorage).filter(k => k.startsWith('rr_')).forEach(k => localStorage.removeItem(k)); location.reload();
 };
+window.addEventListener('resize', () => { if (lmap && ride && ride.route) lmap.invalidateSize(); });
 window.addEventListener('beforeunload', e => { if (ride && ride.running){ e.preventDefault(); e.returnValue = ''; } });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
