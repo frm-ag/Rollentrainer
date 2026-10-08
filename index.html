@@ -8,8 +8,8 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Rolle – Indoor-Training</title>
-<link rel="stylesheet" href="leaflet.css">
-<script src="leaflet.js" defer></script>
+<link rel="stylesheet" href="maplibre-gl.css">
+<script src="maplibre-gl.js" defer></script>
 <style>
 :root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--line:#2a2f3a;--text:#e8eaf0;--muted:#8a91a3;--acc:#ff6a1a;--ok:#22c55e;--warn:#facc15;--bad:#ef4444}
 *{box-sizing:border-box}
@@ -122,7 +122,11 @@ pre.log{background:var(--card2);border-radius:8px;padding:10px;font-size:12px;ov
 #elev{display:block;width:100%;height:78px;border-top:1px solid var(--line)}
 .rmain.routeonly .chartwrap{display:none}
 @media (max-width:700px){.rmain{flex-direction:column}.rmain .chartwrap{min-height:140px}}
-.leaflet-container{font:inherit}
+.mapwrap{position:relative}
+.maplibregl-ctrl-attrib{font-size:10px}
+.mapctl{position:absolute;top:8px;left:8px;z-index:3;display:flex;gap:6px;flex-wrap:wrap}
+.mapctl button,.mapctl select{padding:6px 10px;font-size:13px;background:rgba(15,17,21,.85);border:1px solid var(--line);border-radius:8px;color:var(--text)}
+.mapmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--muted);font-size:14px}
 .rider-dot{width:18px;height:18px;border-radius:50%;background:var(--acc);border:3px solid #fff;box-shadow:0 0 0 3px rgba(255,106,26,.45)}
 .routes{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
 select{background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;max-width:100%}
@@ -182,7 +186,7 @@ select{background:var(--card2);color:var(--text);border:1px solid var(--line);bo
       <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
     <h2>Zwift Click – Diagnose</h2>
     <div class="card"><p class="muted s" style="margin-top:0">Click v2: Mit Fremd-Apps funktioniert die <b>rechte</b> Einheit (Taste + = mehr, B = weniger). Die linke ist von Zwift gesperrt. Reagiert nichts: Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
-    <h2>Daten</h2><div class="muted s" style="margin:-4px 0 8px">App-Version 9</div>
+    <h2>Daten</h2><div class="muted s" style="margin:-4px 0 8px">App-Version 10</div>
     <div class="card"><button id="btnWipe">Alle Daten löschen</button></div>
   </section>
 </main>
@@ -202,7 +206,7 @@ select{background:var(--card2);color:var(--text);border:1px solid var(--line);bo
     <div class="irem" id="iRem">0:00</div>
     <div class="next" id="iNext"></div>
   </div>
-  <div class="rmain" id="rmain"><div class="mapwrap hidden" id="mapWrap"><div id="map"></div><canvas id="elev"></canvas></div><div class="chartwrap"><canvas id="chart"></canvas></div></div>
+  <div class="rmain" id="rmain"><div class="mapwrap hidden" id="mapWrap"><div id="map"></div><div class="mapctl"><button id="m3d">2D</button><select id="mBase"></select><button id="mFollow" class="hidden">◎ Folgen</button></div><canvas id="elev"></canvas></div><div class="chartwrap"><canvas id="chart"></canvas></div></div>
   <div class="ctrl">
     <div class="adj"><button id="cMinus">−</button><div id="cLbl"></div><button id="cPlus">+</button></div>
     <button id="cPause">Pause</button>
@@ -247,7 +251,7 @@ let activeId = LS.get('rr_active', profiles[0].id);
 const prof = () => profiles.find(p => p.id === activeId) || profiles[0];
 ['ftp', 'weight', 'ftpLog', 'hrMax', 'age', 'hrRest'].forEach(k => Object.defineProperty(settings, k, {get:() => prof()[k], set:v => { prof()[k] = v; }, enumerable:false}));
 const histKey = () => 'rr_hist_' + prof().id;
-const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause, difficulty:settings.difficulty, mapRoute:settings.mapRoute}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
+const saveSettings = () => { LS.set('rr_settings', {sound:settings.sound, autoPause:settings.autoPause, difficulty:settings.difficulty, mapRoute:settings.mapRoute, map3d:settings.map3d, mapBase:settings.mapBase}); LS.set('rr_profiles', profiles); LS.set('rr_active', activeId); };
 function switchProfile(id){
   if (ride && ride.running){ toast('Während eines Trainings kann das Profil nicht gewechselt werden'); return; }
   activeId = id; saveSettings(); renderAll(); closeModal(); toast(`Profil: ${prof().name} · FTP ${prof().ftp} W`);
@@ -394,41 +398,78 @@ const routeWorkout = rt => ({id:'route_' + rt.id, routeId:rt.id, routeRide:true,
   desc:`${(rt.dist/1000).toFixed(1)} km · ${rt.gain} Hm. Die Steigung wird an den Trainer übertragen, deine Geschwindigkeit ergibt sich aus Leistung und Gewicht. +/− schaltet virtuelle Gänge.`,
   segs:[{dur:24*3600, p0:0, p1:0, kind:'route', label:'Route'}]});
 const inCH = rt => { const p = rt.pts[Math.floor(rt.pts.length/2)]; return p[0] > 45.8 && p[0] < 47.9 && p[1] > 5.9 && p[1] < 10.6; };
-let lmap = null, lLayers = null, lLine = null, lDone = null, lDot = null, lLastPan = 0;
+/* Karte mit MapLibre: 2D oder 3D-Gelände (Kamera folgt dem Fahrer) */
+const BASES = {
+  chimg:{name:'Luftbild CH', tiles:['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg'], max:19, attr:'© swisstopo'},
+  chmap:{name:'Landeskarte CH', tiles:['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'], max:18, attr:'© swisstopo'},
+  world:{name:'Luftbild Welt', tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], max:18, attr:'Tiles © Esri'},
+  osm:{name:'OpenStreetMap', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max:19, attr:'© OpenStreetMap'}};
+let mlMap = null, mlMarker = null, mlRaf = 0, mlBearing = null, mlFollow = true, mlLastDone = 0, mlLastFrame = 0, mlBase = '';
+const lineGeo = c => ({type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c.length > 1 ? c : [c[0] || [0, 0], c[0] || [0, 0]]}});
+function mlStyle(rt, key){
+  const b = BASES[key];
+  return {version:8,
+    sources:{
+      base:{type:'raster', tiles:b.tiles, tileSize:256, maxzoom:b.max, attribution:b.attr},
+      dem:{type:'raster-dem', tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], tileSize:256, maxzoom:14, encoding:'terrarium', attribution:'Höhen © Mapzen'},
+      route:{type:'geojson', data:lineGeo(rt.pts.map(p => [p[1], p[0]]))},
+      done:{type:'geojson', data:lineGeo([])}},
+    layers:[
+      {id:'bg', type:'background', paint:{'background-color':'#20242c'}},
+      {id:'base', type:'raster', source:'base'},
+      {id:'route', type:'line', source:'route', layout:{'line-cap':'round', 'line-join':'round'}, paint:{'line-color':'#ffffff', 'line-width':5, 'line-opacity':.85}},
+      {id:'done', type:'line', source:'done', layout:{'line-cap':'round', 'line-join':'round'}, paint:{'line-color':'#ff6a1a', 'line-width':6}}],
+    terrain:{source:'dem', exaggeration:1.25},
+    sky:{'sky-color':'#7fb0e6', 'horizon-color':'#d9e7f5', 'fog-color':'#dfe8f2', 'sky-horizon-blend':0.6, 'horizon-fog-blend':0.6, 'fog-ground-blend':0.7}};
+}
 function setupMap(rt){
-  if (!window.L){ toast('Karte konnte nicht geladen werden'); return false; }
-  if (!lmap){
-    lmap = L.map('map', {zoomControl:true, attributionControl:true});
-    const sw = 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.';
-    lLayers = {
-      'Luftbild CH (swisstopo)': L.tileLayer(sw + 'swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {maxZoom:19, attribution:'© swisstopo'}),
-      'Landeskarte CH (swisstopo)': L.tileLayer(sw + 'pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {maxZoom:18, attribution:'© swisstopo'}),
-      'Luftbild Welt (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:18, attribution:'Tiles © Esri'}),
-      'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'})};
-    L.control.layers(lLayers, null, {position:'topright'}).addTo(lmap);
-  }
-  lmap.setView([rt.pts[0][0], rt.pts[0][1]], 16, {animate:false});
-  Object.values(lLayers).forEach(l => lmap.removeLayer(l));
-  lLayers[inCH(rt) ? 'Luftbild CH (swisstopo)' : 'Luftbild Welt (Esri)'].addTo(lmap);
-  [lLine, lDone, lDot].forEach(x => x && lmap.removeLayer(x));
-  const ll = rt.pts.map(p => [p[0], p[1]]);
-  lLine = L.polyline(ll, {color:'#ffffff', weight:5, opacity:.85}).addTo(lmap);
-  lDone = L.polyline([], {color:'#ff6a1a', weight:5}).addTo(lmap);
-  lDot = L.marker(ll[0], {icon:L.divIcon({className:'', html:'<div class="rider-dot"></div>', iconSize:[18, 18], iconAnchor:[9, 9]}), interactive:false}).addTo(lmap);
-  setTimeout(() => { lmap.invalidateSize(); lmap.setView(ll[0], 16); }, 50);
+  const el = $('#map');
+  if (mlMap){ try { mlMap.remove(); } catch(e){} mlMap = null; }
+  el.innerHTML = '';
+  if (!window.maplibregl){ el.innerHTML = '<div class="mapmsg">Karte konnte nicht geladen werden (offline?)</div>'; return false; }
+  mlBase = (settings.mapBase && BASES[settings.mapBase] && !(settings.mapBase.startsWith('ch') && !inCH(rt))) ? settings.mapBase : (inCH(rt) ? 'chimg' : 'world');
+  $('#mBase').innerHTML = Object.entries(BASES).map(([k, b]) => `<option value="${k}" ${k === mlBase ? 'selected' : ''}>${b.name}</option>`).join('');
+  $('#m3d').textContent = settings.map3d === false ? '3D' : '2D';
+  mlFollow = true; $('#mFollow').classList.add('hidden'); mlBearing = null;
+  const p0 = rt.pts[0];
+  try {
+    mlMap = new maplibregl.Map({container:el, style:mlStyle(rt, mlBase), center:[p0[1], p0[0]], zoom:16, pitch:settings.map3d === false ? 0 : 74, maxPitch:80,
+      attributionControl:{compact:true}, fadeDuration:0});
+  } catch(e){ el.innerHTML = '<div class="mapmsg">3D-Karte wird von diesem Gerät nicht unterstützt (WebGL fehlt).</div>'; mlMap = null; return false; }
+  const dot = document.createElement('div'); dot.className = 'rider-dot';
+  mlMarker = new maplibregl.Marker({element:dot}).setLngLat([p0[1], p0[0]]).addTo(mlMap);
+  const stopFollow = e => { if (e && e.originalEvent){ mlFollow = false; $('#mFollow').classList.remove('hidden'); } };
+  mlMap.on('dragstart', stopFollow); mlMap.on('rotatestart', stopFollow); mlMap.on('pitchstart', stopFollow);
+  mlMap.on('error', () => {});   // fehlende Kacheln still ignorieren
+  setTimeout(() => mlMap && mlMap.resize(), 60);
+  if (!mlRaf) mlRaf = requestAnimationFrame(mlFrame);
   return true;
 }
-function updateMap(r){
-  if (!lmap || !r.route) return;
-  const rt = r.route, p = routeAt(rt, r.dist);
-  lDot.setLatLng([p.lat, p.lon]);
-  const now = performance.now();
-  if (now - lLastPan > 1000){
-    lLastPan = now; lmap.panTo([p.lat, p.lon], {animate:true, duration:0.8});
-    const P = rt.pts, out = []; for (const q of P){ if (q[3] > r.dist) break; out.push([q[0], q[1]]); } out.push([p.lat, p.lon]);
-    lDone.setLatLngs(out);
+const brng = (a, b) => { const r = Math.PI/180, y = Math.sin((b.lon - a.lon)*r)*Math.cos(b.lat*r),
+  x = Math.cos(a.lat*r)*Math.sin(b.lat*r) - Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon - a.lon)*r); return Math.atan2(y, x)/r; };
+function mlFrame(now){
+  const r = ride;
+  if (!r || !r.route || !mlMap){ mlRaf = 0; return; }
+  mlRaf = requestAnimationFrame(mlFrame);
+  if (now - mlLastFrame < 33) return;              // max. ~30 Bilder/s (Akku)
+  const dt = Math.min(0.2, (now - (mlLastFrame || now))/1000); mlLastFrame = now;
+  const rt = r.route, moving = r.running && !r.paused;
+  const d = clamp(r.dist + (moving ? r.vs*Math.min(0.3, (performance.now() - lastTick)/1000) : 0), 0, rt.dist);
+  const p = routeAt(rt, d), ahead = d + 80 <= rt.dist ? routeAt(rt, d + 80) : null, behind = routeAt(rt, Math.max(0, d - 80));
+  const target = ahead ? brng(p, ahead) : brng(behind, p);
+  if (mlBearing == null) mlBearing = target;
+  let diff = ((target - mlBearing + 540) % 360) - 180; mlBearing += diff*(1 - Math.exp(-dt/0.9));
+  mlMarker.setLngLat([p.lon, p.lat]);
+  if (mlFollow){
+    const is3d = settings.map3d !== false;
+    mlMap.jumpTo({center:[p.lon, p.lat], bearing:is3d ? mlBearing : 0, pitch:is3d ? 74 : 0, zoom:is3d ? 16.3 : 15});
+  }
+  if (now - mlLastDone > 1000){
+    mlLastDone = now; const src = mlMap.getSource && mlMap.getSource('done');
+    if (src){ const c = []; for (const q of rt.pts){ if (q[3] > d) break; c.push([q[1], q[0]]); } c.push([p.lon, p.lat]); src.setData(lineGeo(c)); }
   }
 }
+function updateMap(){ if (ride && ride.route && mlMap && !mlRaf) mlRaf = requestAnimationFrame(mlFrame); }
 function drawElev(r){
   const cv = $('#elev'), rt = r.route, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W || !H || !rt) return;
@@ -1310,9 +1351,12 @@ $('#btnWipe').onclick = () => {
   if (!confirm('Alle Einstellungen, Trainings und den Verlauf löschen?')) return;
   Object.keys(localStorage).filter(k => k.startsWith('rr_')).forEach(k => localStorage.removeItem(k)); location.reload();
 };
-window.addEventListener('resize', () => { if (lmap && ride && ride.route) lmap.invalidateSize(); });
+window.addEventListener('resize', () => { if (mlMap) mlMap.resize(); });
+$('#m3d').onclick = () => { settings.map3d = settings.map3d === false; saveSettings(); $('#m3d').textContent = settings.map3d === false ? '3D' : '2D'; mlFollow = true; $('#mFollow').classList.add('hidden'); };
+$('#mBase').onchange = e => { if (!ride || !ride.route || !mlMap) return; mlBase = e.target.value; settings.mapBase = mlBase; saveSettings(); mlMap.setStyle(mlStyle(ride.route, mlBase)); mlLastDone = 0; };
+$('#mFollow').onclick = () => { mlFollow = true; $('#mFollow').classList.add('hidden'); };
 window.addEventListener('beforeunload', e => { if (ride && ride.running){ e.preventDefault(); e.returnValue = ''; } });
-const APP_VERSION = '9';
+const APP_VERSION = '10';
 if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(r => r.update()).catch(() => {});
   let reloaded = false;
