@@ -182,7 +182,7 @@ select{background:var(--card2);color:var(--text);border:1px solid var(--line);bo
       <label class="btn"><input type="file" id="zwoFile" accept=".zwo,.xml" multiple hidden>ZWO-Datei importieren</label></div>
     <h2>Zwift Click – Diagnose</h2>
     <div class="card"><p class="muted s" style="margin-top:0">Click v2: Mit Fremd-Apps funktioniert die <b>rechte</b> Einheit (Taste + = mehr, B = weniger). Die linke ist von Zwift gesperrt. Reagiert nichts: Tasten drücken und diese Zeilen an Claude schicken.</p><pre class="log" id="clickLog">–</pre></div>
-    <h2>Daten</h2>
+    <h2>Daten</h2><div class="muted s" style="margin:-4px 0 8px">App-Version 9</div>
     <div class="card"><button id="btnWipe">Alle Daten löschen</button></div>
   </section>
 </main>
@@ -1312,7 +1312,12 @@ $('#btnWipe').onclick = () => {
 };
 window.addEventListener('resize', () => { if (lmap && ride && ride.route) lmap.invalidateSize(); });
 window.addEventListener('beforeunload', e => { if (ride && ride.running){ e.preventDefault(); e.returnValue = ''; } });
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+const APP_VERSION = '9';
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(r => r.update()).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && !(ride && ride.running)){ reloaded = true; location.reload(); } });
+}
 
 renderAll();
 setInterval(tick, 250);
